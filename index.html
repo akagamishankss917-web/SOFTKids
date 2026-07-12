@@ -494,16 +494,16 @@ function drawHat(spec) {
         <path d="M -30 8 L 0 -58 L 30 8 Z" fill="#8ecae6"/>
         <path d="M -21 -12 L 21 -12 L 26 0 L -26 0 Z" fill="#ffd94d"/>
         <circle cx="0" cy="-58" r="9" fill="#ff8fb5"/></g>`;
-    case 'cap': // baseball cap, brim to the character's right
-      return `<g transform="translate(0,-310)">
-        <path d="M -58 4 Q -58 -52 0 -52 Q 58 -52 58 4 Z" fill="#2e3350"/>
-        <path d="M 0 -52 Q 34 -50 50 -22 Q 26 -30 0 -30 Z" fill="#3a4066"/>
-        <path d="M 52 -2 Q 108 -2 112 16 Q 62 22 50 12 Z" fill="#f2a83d"/>
-        <path d="M -58 2 Q 0 12 58 2 L 58 8 Q 0 18 -58 8 Z" fill="#f2a83d"/>
-        <circle cx="0" cy="-50" r="7" fill="#f2a83d"/>
-        <circle cx="18" cy="-30" r="13" fill="#f2c94c" stroke="#e0932c" stroke-width="3"/></g>`;
+    case 'cap': // baseball cap, seated on the head rather than hovering over it
+      return `<g transform="translate(0,-298)">
+        <path d="M -60 2 Q -60 -54 0 -54 Q 60 -54 60 2 Z" fill="#2e3350"/>
+        <path d="M 0 -54 Q 36 -52 52 -22 Q 27 -31 0 -31 Z" fill="#3a4066"/>
+        <path d="M 54 -4 Q 112 -4 116 14 Q 64 21 52 10 Z" fill="#f2a83d"/>
+        <path d="M -60 0 Q 0 10 60 0 L 60 7 Q 0 17 -60 7 Z" fill="#f2a83d"/>
+        <circle cx="0" cy="-52" r="7" fill="#f2a83d"/>
+        <circle cx="19" cy="-32" r="13" fill="#f2c94c" stroke="#e0932c" stroke-width="3"/></g>`;
     case 'bucket': // bucket hat
-      return `<g transform="translate(0,-306)">
+      return `<g transform="translate(0,-298)">
         <path d="M -50 0 Q -50 -50 0 -50 Q 50 -50 50 0 Z" fill="#2c2c34"/>
         <path d="M -78 2 Q -68 -8 -50 -6 L 50 -6 Q 68 -8 78 2 Q 40 20 0 20 Q -40 20 -78 2 Z" fill="#35353f"/>
         <path d="M -46 -14 L 46 -14" stroke="#43434f" stroke-width="6"/></g>`;
@@ -518,87 +518,101 @@ function drawHat(spec) {
   }
 }
 
+// One shared torso: soft shoulders, gentle taper, rounded hem. Every top ends
+// at the same hip line so bottoms always tuck underneath it.
+function torso(hem) {
+  return `M -46 -184 Q -46 -198 -28 -198 L 28 -198 Q 46 -198 46 -184 L 43 ${hem} Q 0 ${hem + 9} -43 ${hem} Z`;
+}
+
 function drawTop(spec) {
   const t = spec.top, c = t.color;
+  const shade = d => `<path d="${d}" fill="url(#wallShade)"/>`;
   switch (t.type) {
     case 'dress': {
+      const d = 'M -40 -184 Q -40 -198 -26 -198 L 26 -198 Q 40 -198 40 -184 L 42 -138 Q 64 -76 56 -58 Q 0 -44 -56 -58 Q -64 -76 -42 -138 Z';
       const collar = t.collar ? `
-        <path d="M -30 -190 L 0 -170 L -38 -158 Q -44 -176 -30 -190 Z" fill="${t.collar}"/>
-        <path d="M 30 -190 L 0 -170 L 38 -158 Q 44 -176 30 -190 Z" fill="${t.collar}"/>
-        <circle cx="0" cy="-170" r="8" fill="${t.collar}" stroke="#e8d8e0" stroke-width="2"/>` : '';
-      return `<path d="M -38 -195 L 38 -195 L 64 -58 Q 0 -40 -64 -58 Z" fill="${c}"/>
-              <circle cx="0" cy="-140" r="4" fill="#fff" opacity="0.8"/>
-              <circle cx="0" cy="-115" r="4" fill="#fff" opacity="0.8"/>
-              ${collar}`;
+        <path d="M -26 -196 Q 0 -172 26 -196 L 26 -184 Q 0 -162 -26 -184 Z" fill="${t.collar}"/>
+        <circle cx="0" cy="-168" r="6" fill="${t.collar}" stroke="${darken(t.collar, 0.12)}" stroke-width="2"/>` : '';
+      return `<path d="${d}" fill="${c}"/>${shade(d)}
+        <path d="M -56 -58 Q 0 -44 56 -58" stroke="${darken(c, 0.14)}" stroke-width="5" fill="none"/>
+        <circle cx="0" cy="-140" r="4" fill="#fff" opacity="0.85"/>
+        <circle cx="0" cy="-116" r="4" fill="#fff" opacity="0.85"/>
+        ${collar}`;
     }
-    case 'baroSaya': // Filipiniana: white butterfly-sleeve top + colored skirt
-      return `<path d="M -38 -195 L 38 -195 L 44 -120 L -44 -120 Z" fill="#fffaf2"/>
-              <path d="M -38 -195 Q -70 -200 -66 -168 Q -52 -160 -40 -172 Z" fill="#fffaf2"/>
-              <path d="M 38 -195 Q 70 -200 66 -168 Q 52 -160 40 -172 Z" fill="#fffaf2"/>
-              <path d="M -44 -122 L 44 -122 L 66 -52 Q 0 -36 -66 -52 Z" fill="${c}"/>
-              <path d="M -60 -66 Q 0 -50 60 -66" stroke="#f2c94c" stroke-width="5" fill="none"/>`;
-    case 'gown': { // princess / party ball gown: fitted bodice + wide sparkly skirt
+    case 'baroSaya': {
+      const top = torso(-118);
+      const skirt = 'M -44 -122 L 44 -122 L 62 -54 Q 0 -40 -62 -54 Z';
+      return `<path d="${top}" fill="#fffaf2"/>${shade(top)}
+        <ellipse cx="-46" cy="-184" rx="15" ry="11" fill="#fffaf2"/>
+        <ellipse cx="46" cy="-184" rx="15" ry="11" fill="#fffaf2"/>
+        <path d="${skirt}" fill="${c}"/>${shade(skirt)}
+        <path d="M -58 -66 Q 0 -52 58 -66" stroke="#f2c94c" stroke-width="5" fill="none"/>`;
+    }
+    case 'gown': {
       const trim = t.collar || '#ffe9a8';
-      const sparkle = [[-34, -92], [24, -74], [-8, -54], [44, -108], [-52, -58], [12, -104]]
+      const d = 'M -40 -184 Q -40 -198 -26 -198 L 26 -198 Q 40 -198 40 -184 L 46 -146 Q 96 -42 88 -26 Q 0 -8 -88 -26 Q -96 -42 -46 -146 Z';
+      const sparkle = [[-34, -92], [24, -74], [-8, -50], [44, -104], [-52, -54], [12, -120]]
         .map(([x, y]) => `<path d="M ${x} ${y - 6} L ${x + 2} ${y - 1} L ${x + 7} ${y} L ${x + 2} ${y + 1} L ${x} ${y + 6} L ${x - 2} ${y + 1} L ${x - 7} ${y} L ${x - 2} ${y - 1} Z" fill="#fff" opacity="0.85"/>`).join('');
-      return `<path d="M -40 -196 L 40 -196 L 100 -18 Q 0 6 -100 -18 Z" fill="${c}"/>
-              <path d="M -40 -196 L 40 -196 L 46 -150 Q 0 -140 -46 -150 Z" fill="${trim}"/>
-              <path d="M -100 -18 Q 0 6 100 -18" stroke="${trim}" stroke-width="6" fill="none"/>
-              <path d="M -46 -150 Q 0 -122 46 -150" stroke="${trim}" stroke-width="4" fill="none"/>
-              <path d="M -30 -188 L 0 -168 L -38 -156 Q -44 -176 -30 -188 Z" fill="${trim}"/>
-              <path d="M 30 -188 L 0 -168 L 38 -156 Q 44 -176 30 -188 Z" fill="${trim}"/>
-              ${sparkle}`;
+      return `<path d="${d}" fill="${c}"/>${shade(d)}
+        <path d="M -40 -184 Q -40 -198 -26 -198 L 26 -198 Q 40 -198 40 -184 L 42 -150 Q 0 -138 -42 -150 Z" fill="${trim}"/>
+        <path d="M -88 -26 Q 0 -8 88 -26" stroke="${trim}" stroke-width="6" fill="none"/>
+        ${sparkle}`;
     }
-    case 'uniform': { // school uniform: white blouse + tie + pleated skirt
-      const skirt = t.skirt || '#3a4a6a';
-      return `<rect x="-46" y="-196" width="92" height="74" rx="16" fill="#fbfbfd"/>
-              <path d="M -46 -186 L -76 -160 L -62 -138 L -44 -156 Z" fill="#fbfbfd"/>
-              <path d="M 46 -186 L 76 -160 L 62 -138 L 44 -156 Z" fill="#fbfbfd"/>
-              <path d="M -16 -196 L 0 -180 L -18 -172 Z" fill="#eeeef2"/>
-              <path d="M 16 -196 L 0 -180 L 18 -172 Z" fill="#eeeef2"/>
-              <path d="M 0 -180 L -7 -150 L 0 -140 L 7 -150 Z" fill="#c94f5c"/>
-              <path d="M -50 -126 L 50 -126 L 62 -52 Q 0 -36 -62 -52 Z" fill="${skirt}"/>
-              ${[-38, -19, 0, 19, 38].map(x => `<line x1="${x}" y1="-122" x2="${x * 1.22}" y2="-54" stroke="#2a3550" stroke-width="2.5"/>`).join('')}`;
+    case 'uniform': {
+      const top = torso(-120);
+      const sk = t.skirt || '#3a4a6a';
+      const skirt = 'M -44 -124 L 44 -124 L 60 -52 Q 0 -38 -60 -52 Z';
+      return `<path d="${top}" fill="#fbfbfd"/>${shade(top)}
+        <path d="M -16 -198 L 0 -180 L 16 -198 Q 0 -190 -16 -198 Z" fill="#e4e4ea"/>
+        <path d="M 0 -180 L -7 -148 L 0 -138 L 7 -148 Z" fill="#c94f5c"/>
+        <path d="${skirt}" fill="${sk}"/>${shade(skirt)}
+        ${[-30, 0, 30].map(x => `<line x1="${x}" y1="-120" x2="${x * 1.5}" y2="-46" stroke="${darken(sk, 0.25)}" stroke-width="2.5"/>`).join('')}`;
     }
-    case 'tutu': { // ballerina: leotard bodice + puffy tutu skirt
+    case 'tutu': {
+      const bod = 'M -34 -184 Q -34 -198 -22 -198 L 22 -198 Q 34 -198 34 -184 L 32 -120 L -32 -120 Z';
       const puff = t.collar || '#fff0f6';
-      return `<path d="M -32 -196 L 32 -196 L 34 -118 L -34 -118 Z" fill="${c}"/>
-              <path d="M -32 -196 Q -58 -198 -54 -170 Q -42 -162 -32 -172 Z" fill="${c}"/>
-              <path d="M 32 -196 Q 58 -198 54 -170 Q 42 -162 32 -172 Z" fill="${c}"/>
-              <path d="M -66 -130 Q 0 -104 66 -130 Q 44 -84 0 -88 Q -44 -84 -66 -130 Z" fill="${puff}"/>
-              <path d="M -54 -122 Q 0 -100 54 -122" stroke="#fff" stroke-width="3" fill="none" opacity="0.7"/>`;
+      return `<path d="${bod}" fill="${c}"/>${shade(bod)}
+        <ellipse cx="0" cy="-104" rx="64" ry="26" fill="${puff}"/>
+        <ellipse cx="0" cy="-96" rx="52" ry="20" fill="${lighten(puff, 0.4)}" opacity="0.85"/>
+        <path d="M -60 -110 Q 0 -88 60 -110" stroke="#fff" stroke-width="3" fill="none" opacity="0.8"/>`;
+    }
+    case 'polo': {
+      const d = torso(-92);
+      return `<path d="${d}" fill="${c}"/>${shade(d)}
+        <path d="M -15 -198 L 0 -178 L 15 -198 Z" fill="${darken(c, 0.10)}"/>
+        <path d="M -19 -200 L 0 -178 L 19 -200 L 12 -205 L 0 -189 L -12 -205 Z" fill="${lighten(c, 0.22)}"/>
+        <circle cx="0" cy="-166" r="3" fill="${darken(c, 0.3)}"/>
+        <circle cx="0" cy="-148" r="3" fill="${darken(c, 0.3)}"/>`;
+    }
+    case 'blouse': {
+      const d = torso(-88);
+      return `<path d="${d}" fill="${c}"/>${shade(d)}
+        <line x1="0" y1="-190" x2="0" y2="-94" stroke="${darken(c, 0.10)}" stroke-width="3"/>
+        <path d="M -14 -198 L 0 -182 L 14 -198 Z" fill="${darken(c, 0.06)}"/>
+        <circle cx="0" cy="-166" r="2.6" fill="${darken(c, 0.25)}"/>
+        <circle cx="0" cy="-144" r="2.6" fill="${darken(c, 0.25)}"/>
+        <circle cx="0" cy="-122" r="2.6" fill="${darken(c, 0.25)}"/>`;
+    }
+    case 'cami': {
+      const d = 'M -36 -178 Q -36 -186 -28 -186 L 28 -186 Q 36 -186 36 -178 L 34 -92 Q 0 -84 -34 -92 Z';
+      return `<path d="${d}" fill="${c}"/>${shade(d)}
+        <line x1="-30" y1="-182" x2="-22" y2="-197" stroke="${c}" stroke-width="7" stroke-linecap="round"/>
+        <line x1="30" y1="-182" x2="22" y2="-197" stroke="${c}" stroke-width="7" stroke-linecap="round"/>`;
+    }
+    case 'openShirt': {
+      const L = 'M -46 -184 Q -46 -198 -30 -198 L -12 -198 L -22 -92 Q -35 -90 -43 -95 Z';
+      const R = 'M 46 -184 Q 46 -198 30 -198 L 12 -198 L 22 -92 Q 35 -90 43 -95 Z';
+      return `<path d="M -28 -196 L 28 -196 L 26 -94 Q 0 -88 -26 -94 Z" fill="#f6f6f8"/>
+        <path d="${L}" fill="${c}"/>${shade(L)}
+        <path d="${R}" fill="${c}"/>${shade(R)}`;
     }
     case 'tshirt':
-      return `<rect x="-46" y="-196" width="92" height="100" rx="20" fill="${c}"/>
-              <path d="M -46 -186 L -76 -160 L -62 -138 L -44 -156 Z" fill="${c}"/>
-              <path d="M 46 -186 L 76 -160 L 62 -138 L 44 -156 Z" fill="${c}"/>
-              ${t.print || ''}`;
-    case 'polo':
-      return `<rect x="-46" y="-196" width="92" height="100" rx="20" fill="${c}"/>
-              <path d="M -46 -186 L -76 -160 L -62 -138 L -44 -156 Z" fill="${c}"/>
-              <path d="M 46 -186 L 76 -160 L 62 -138 L 44 -156 Z" fill="${c}"/>
-              <path d="M -16 -196 L 0 -176 L -22 -168 Z" fill="#e8e8ee"/>
-              <path d="M 16 -196 L 0 -176 L 22 -168 Z" fill="#e8e8ee"/>
-              <circle cx="0" cy="-160" r="3.5" fill="#b8b8c4"/><circle cx="0" cy="-142" r="3.5" fill="#b8b8c4"/>`;
-    case 'blouse':
-      return `<rect x="-48" y="-196" width="96" height="102" rx="20" fill="${c}"/>
-              <path d="M -48 -186 L -74 -158 L -60 -138 L -46 -156 Z" fill="${c}"/>
-              <path d="M 48 -186 L 74 -158 L 60 -138 L 46 -156 Z" fill="${c}"/>
-              <line x1="0" y1="-192" x2="0" y2="-96" stroke="#d8d8de" stroke-width="3"/>
-              <path d="M -14 -196 L 0 -180 L -18 -172 Z" fill="#eeeef2"/>
-              <path d="M 14 -196 L 0 -180 L 18 -172 Z" fill="#eeeef2"/>
-              <circle cx="0" cy="-166" r="3" fill="#c8c8d0"/><circle cx="0" cy="-146" r="3" fill="#c8c8d0"/><circle cx="0" cy="-126" r="3" fill="#c8c8d0"/>`;
-    case 'cami':
-      return `<path d="M -40 -178 L 40 -178 L 44 -96 L -44 -96 Z" fill="${c}"/>
-              <line x1="-34" y1="-178" x2="-24" y2="-196" stroke="${c}" stroke-width="7"/>
-              <line x1="34" y1="-178" x2="24" y2="-196" stroke="${c}" stroke-width="7"/>`;
-    case 'openShirt':
-      return `<rect x="-30" y="-192" width="60" height="96" rx="12" fill="#f4f4f6"/>
-              <path d="M -48 -196 L -18 -192 L -26 -94 L -50 -100 Z" fill="${c}"/>
-              <path d="M 48 -196 L 18 -192 L 26 -94 L 50 -100 Z" fill="${c}"/>
-              <path d="M -48 -186 L -78 -158 L -62 -136 L -46 -156 Z" fill="${c}"/>
-              <path d="M 48 -186 L 78 -158 L 62 -136 L 46 -156 Z" fill="${c}"/>`;
-    default: return `<rect x="-46" y="-196" width="92" height="100" rx="20" fill="${c}"/>`;
+    default: {
+      const d = torso(-92);
+      return `<path d="${d}" fill="${c}"/>${shade(d)}
+        <path d="M -20 -198 Q 0 -186 20 -198" stroke="${darken(c, 0.10)}" stroke-width="5" fill="none"/>
+        ${t.print || ''}`;
+    }
   }
 }
 
@@ -606,13 +620,21 @@ function drawBottom(spec) {
   const isDress = ['dress', 'baroSaya', 'gown', 'uniform', 'tutu'].includes(spec.top.type);
   if (isDress || !spec.bottom) return '';
   const b = spec.bottom, c = b.color;
+  const shade = d => `<path d="${d}" fill="url(#wallShade)"/>`;
   switch (b.type) {
-    case 'shorts':
-      return `<path d="M -44 -100 L 44 -100 L 46 -52 L 8 -52 L 0 -74 L -8 -52 L -46 -52 Z" fill="${c}"/>`;
-    case 'pants':
-      return `<path d="M -44 -100 L 44 -100 L 40 -12 L 10 -12 L 4 -72 L -4 -72 L -10 -12 L -40 -12 Z" fill="${c}"/>`;
-    case 'skirt':
-      return `<path d="M -44 -100 L 44 -100 L 56 -50 Q 0 -38 -56 -50 Z" fill="${c}"/>`;
+    case 'shorts': {
+      const d = 'M -42 -102 L 42 -102 L 45 -56 Q 34 -50 12 -54 L 0 -74 L -12 -54 Q -34 -50 -45 -56 Z';
+      return `<path d="${d}" fill="${c}"/>${shade(d)}
+        <path d="M -44 -60 L -14 -57 M 44 -60 L 14 -57" stroke="${darken(c, 0.18)}" stroke-width="4"/>`;
+    }
+    case 'pants': {
+      const d = 'M -42 -102 L 42 -102 L 38 -16 Q 28 -11 12 -15 L 4 -70 L -4 -70 L -12 -15 Q -28 -11 -38 -16 Z';
+      return `<path d="${d}" fill="${c}"/>${shade(d)}`;
+    }
+    case 'skirt': {
+      const d = 'M -42 -102 L 42 -102 L 56 -50 Q 0 -38 -56 -50 Z';
+      return `<path d="${d}" fill="${c}"/>${shade(d)}`;
+    }
     default: return '';
   }
 }
@@ -665,26 +687,27 @@ function drawShoes(spec) {
   }
 }
 
+// Arms are drawn OVER the top, and the sleeve is part of the arm — not a stub
+// painted on the torso with a bare limb floating behind it, which was why every
+// shirt looked like it was peeling off the shoulders.
 function drawArms(spec) {
   const skin = spec.skin;
-  const sleeveless = ['cami', 'dress', 'baroSaya'].includes(spec.top.type);
-  const sleeve = sleeveless ? '' : null; // sleeves already drawn by top
+  const t = spec.top;
+  const sleeve = { tshirt: t.color, polo: t.color, blouse: t.color, openShirt: t.color, uniform: '#fbfbfd' }[t.type] || null;
   const watch = spec.watch
-    ? `<rect x="-76" y="-118" width="16" height="10" rx="4" fill="${spec.watch === 'gold' ? '#e8b13a' : '#3a3a44'}"/>`
-    : '';
+    ? `<rect x="-73" y="-116" width="17" height="11" rx="5" fill="${spec.watch === 'gold' ? '#e8b13a' : '#3a3a44'}"/>` : '';
   const necklace = spec.necklace
-    ? `<path d="M -18 -192 Q 0 -176 18 -192" stroke="#e8b13a" stroke-width="3" fill="none"/>
+    ? `<path d="M -16 -192 Q 0 -176 16 -192" stroke="#e8b13a" stroke-width="3" fill="none"/>
        <circle cx="0" cy="-178" r="4" fill="#f2c94c"/>` : '';
+  const arm = sx => sleeve
+    ? `<line x1="${44 * sx}" y1="-178" x2="${55 * sx}" y2="-140" stroke="${sleeve}" stroke-width="26" stroke-linecap="round"/>
+       <line x1="${55 * sx}" y1="-142" x2="${63 * sx}" y2="-108" stroke="${skin}" stroke-width="18" stroke-linecap="round"/>
+       <circle cx="${64 * sx}" cy="-103" r="12" fill="${skin}"/>`
+    : `<line x1="${45 * sx}" y1="-178" x2="${63 * sx}" y2="-108" stroke="${skin}" stroke-width="18" stroke-linecap="round"/>
+       <circle cx="${64 * sx}" cy="-103" r="12" fill="${skin}"/>`;
   return `
-    <g class="armL">
-      <line x1="-50" y1="-180" x2="-68" y2="-104" stroke="${skin}" stroke-width="20" stroke-linecap="round"/>
-      <circle cx="-68" cy="-100" r="12" fill="${skin}"/>
-      ${watch}
-    </g>
-    <g class="armR">
-      <line x1="50" y1="-180" x2="68" y2="-104" stroke="${skin}" stroke-width="20" stroke-linecap="round"/>
-      <circle cx="68" cy="-100" r="12" fill="${skin}"/>
-    </g>
+    <g class="armL">${arm(-1)}${watch}</g>
+    <g class="armR">${arm(1)}</g>
     ${necklace}`;
 }
 
@@ -739,17 +762,17 @@ function buildCharacter(spec, opts = {}) {
     ${shadow}
     <g>${bob}
       ${hairBack(spec)}
-      <!-- legs -->
-      <rect x="-30" y="-60" width="20" height="46" rx="9" fill="${spec.skin}"/>
-      <rect x="10" y="-60" width="20" height="46" rx="9" fill="${spec.skin}"/>
+      <!-- legs: rounded capsules instead of hard-cornered rects -->
+      <line x1="-19" y1="-88" x2="-19" y2="-20" stroke="${spec.skin}" stroke-width="24" stroke-linecap="round"/>
+      <line x1="19" y1="-88" x2="19" y2="-20" stroke="${spec.skin}" stroke-width="24" stroke-linecap="round"/>
       ${drawShoes(spec)}
       ${drawBottom(spec)}
-      ${drawArms(spec)}
       ${drawTop(spec)}
       <!-- neck + head -->
-      <rect x="-12" y="-216" width="24" height="26" fill="${spec.skin}"/>
+      <rect x="-12" y="-216" width="24" height="30" rx="8" fill="${spec.skin}"/>
       <circle cx="0" cy="-252" r="66" fill="${spec.skin}"/>
       ${face}
+      ${drawArms(spec)}
       ${earrings}
       ${drawHat(spec)}
     </g>
@@ -1078,7 +1101,16 @@ function makeWalker(cfg) {
     getPos: () => pos,
     move: (x, y) => { pos.x = clamp(x, b.minX, b.maxX); pos.y = clamp(y, b.minY, b.maxY); place(); },
     toLocal: cfg.toLocal,
-    onTap: cfg.onTap,
+    // a tap on your own character is a happy hop — every touch should answer
+    onTap: cfg.onTap || (() => {
+      Audio.sfx('giggle');
+      const s0 = cfg.scaleFn ? cfg.scaleFn(pos.y) : 1;
+      tween(450, t => {
+        const hop = Math.sin(t * Math.PI) * 36;
+        const sq = 1 + Math.sin(t * Math.PI * 2) * 0.06;
+        cfg.g.setAttribute('transform', `translate(${pos.x} ${pos.y - hop}) scale(${s0 * pos.facing * sq} ${s0 * (2 - sq)})`);
+      }, () => place());
+    }),
     onDrop: p => {
       sortDepth(cfg.g.parentNode);
       if (cfg.onDrop) cfg.onDrop(p);
