@@ -138,8 +138,5 @@ in it when shipping, or returning phones keep the old build.
 
 ## Known rough edges
 
-- Gab's cap sits slightly high over his photo face, and arms read as detached on
-  the `openShirt` top (Timmy). Both live in the character rig near `drawHat` /
-  `drawArms`.
 - The venue interiors still use emoji for shop goods and the storybook picture.
   Fine as illustration, but they'd look better hand-drawn.
