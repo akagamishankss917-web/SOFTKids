@@ -1,64 +1,81 @@
 # SOFT Kids Adventure — handoff
 
-**As of 2026-07-12.** The game is built, runs clean, and is playable end to end.
-Everything below is on disk. Nothing is half-written.
+**Live:** https://akagamishankss917-web.github.io/SOFTKids/
+**Repo:** https://github.com/akagamishankss917-web/SOFTKids (`main` = source, `gh-pages` = the deployed site)
 
-## Play it right now
+Open `soft-kids-game/index.html` in any browser and it just runs. That one file
+*is* the game — no build step, no server, no dependencies. On a phone, "Add to
+home screen" installs it as an app that works with no signal.
 
-Open `soft-kids-game/index.html` in a browser. That single file *is* the game —
-no build step, no server, no dependencies.
+---
 
-## What it does
+## What it is
 
 Title → **pick a kid** → the barangay reshapes around them.
 
 Five pickable kids: **Eya, Jeya, Gab, Tia, Timmy.**
 
-The chosen kid's house becomes **home**: you spawn in front of it, it carries the
-wardrobe and the food tray, and their parents are inside. Pick **Tia** and her
-brother **Timmy** is standing in the house to hug — and the other way round.
-Everyone else's house is a **visit**: same room, their toys, their family, but no
-wardrobe and no food tray. **Tito Boy** has a house and no kids, so he is never
-pickable but always visitable.
+`State.hero` is the only switch in the game. The household containing that kid is
+**home**: you spawn in front of it, it holds the wardrobe and the food tray, and
+your parents are inside. Pick **Tia** and her brother **Timmy** is standing there
+to hug — and the other way round. Everyone else's house is a **visit**: their
+toys, their family, no wardrobe, no food tray. **Tito Boy** has a house and no
+kids, so he is never pickable but always visitable.
 
-The wardrobe is gender-split: girls get 10 dress-up items, boys get 6 (new art —
-cap, bucket hat, tee-and-shorts, basketball kit, barong, sneakers). Each kid
-**starts in their own clothes**, taken from their real photo; the wardrobe only
-overrides a slot once you pick something. Outfits are saved per kid.
+Wardrobe is gender-split — 10 girl items, 6 boy items. Each kid **starts in their
+own clothes**, taken from their real photo; the wardrobe only overrides a slot
+once you pick something. Outfits save per kid.
 
-## The one design call I made without asking
+---
 
-You picked "gender-appropriate items" and declined per-kid signature looks. Taken
-literally that meant every girl booted up wearing **Eya's tiara and pink dress**,
-which looked wrong the moment I saw Tia in it. So a kid now defaults to the
-clothes they are drawn in, and the wardrobe changes things from there. If you
-actually want every girl to start in the same default outfit, say so and it is a
-two-line revert in `heroSpec()`.
+## Things to play with
 
-## Toys
+**Indoors** — a basketball hoop you shoot at (arc, swish, confetti), a piano that
+plays a tune, a bubble jar, a bouncy ball, plus the drums, blocks, dolls, cake,
+cat, robot, guitar, TV, camera, binoculars and watering can from before.
 
-Two real bugs in the inherited engine, both fixed:
+**Outdoors** — a barangay basketball court past the mall, a football to boot
+across the field, a bubble machine, the tricycle you can ride, a kite, a dog, a
+jump rope, and the playground (slide, swing, seesaw, sandbox, beach ball).
 
-- `makeDraggable` treated **any** pointer movement as a drag, so a toddler's tap
-  with a pixel of jitter yanked the toy out from under their finger and played a
-  drop sound. It now uses a 12px threshold, the same one characters already used.
-  A tap is now a tap: wobble and squeak, nothing picked up.
-- Props stayed draggable **during** door-opening and ride animations. Every prop
-  handler now respects `App.locked`.
+---
 
-## Verified
+## The two bugs that mattered
 
-`node shots.mjs` drives the real game in headless Chromium across all 15 scenes.
-Latest run: **no page errors**, and the semantics assert out —
+Both were inherited from the source game and both are fixed and verified:
 
-| Check | Result |
-| --- | --- |
-| Pick screen | 5 tiles |
-| Eya's house, playing Eya | wardrobe ✓, food tray ✓, 2 residents (her parents) |
-| Debs' house, playing Tia | wardrobe ✓, 2 residents (Timmy + Mommy Debs) |
-| Debs' house, playing Timmy | wardrobe ✓, 2 residents (Tia + Mommy Debs) |
-| Tito Boy's house, playing Eya | **no wardrobe, no food tray**, 1 resident |
-| Dress-up as Eya / as Gab | 10 items / 6 items |
+- **`makeDraggable` counted any pointer movement as a drag.** A toddler's tap with
+  a pixel of jitter yanked the toy out from under their finger and played a drop
+  sound. It now uses a 12px threshold — the same one characters already had. A tap
+  is a tap: it wobbles and squeaks, nothing is picked up.
+- **Overlap.** Props sat in a layer *under* every character and the hero drew over
+  everyone, so a toy dragged onto a person vanished behind them and a resident
+  standing closer still drew behind the hero. Everything that stands on the floor
+  now shares one `#depthLayer`, sorted by ground Y (painter's algorithm). Sorting
+  happens on drop, not every frame: what you're holding is raised to the front,
+  and settles into its true depth when you let go.
+
+---
+
+## Design
+
+Built to the **ui-ux-pro-max** skill's design system, which picked
+**Claymorphism** for a children's game: soft 3D, chunky, toy-like. Its checklist
+named the two things that made the game look cheap, and both were true:
+
+- **Emoji as icons** → one vector icon set on a 24px grid (`ICON_PATHS`, `icon()`).
+  Emoji that remain are *content* illustrations inside venues (shop goods, a
+  storybook picture), not controls.
+- **Comic Sans** → **Fredoka**, embedded as a woff2 data-URI so the game still
+  runs offline from one file.
+
+Every control is a `clayButton()` that squashes on press (CSS `:active` on
+`.clayPress`, 140ms spring). Characters have contact shadows. Interiors have lit
+walls and receding floorboards (`roomDefs()` for houses, `venueRoom()` for the
+four venues). `prefers-reduced-motion` is respected — SMIL is paused by hand in
+`applyMotionPreference()`, since it ignores the CSS media query.
+
+---
 
 ## How the pieces fit
 
@@ -66,10 +83,10 @@ Latest run: **no page errors**, and the semantics assert out —
   top holds `GAME`, `CHARACTERS`, `HOUSEHOLDS`. Below it the engine never names a
   child; it reads `State.hero`.
 - `tools/make_faces.py` — walks `households/`, crops each face with a hand-tuned
-  box, injects them as base64 between the `FACES:BEGIN/END` markers. Safe to
-  re-run any time.
+  box, injects them as base64 between the `FACES:BEGIN/END` markers.
 - `tools/make_icons.py` — the PWA icons.
-- `households/` — the cast, as folders. Source of truth for who exists.
+- `households/` — the cast, as folders. **Git-ignored**: the full-resolution
+  photos never leave this machine. Only the 176px crops embedded in the game ship.
 
 ### Adding a sixth kid
 
@@ -78,13 +95,16 @@ Latest run: **no page errors**, and the semantics assert out —
 3. A `CHARACTERS` entry (needs `gender` to be pickable) and a `HOUSEHOLDS` line.
 
 No map coordinates. `layoutHouses()` places the house, picks its colour, widens
-the world and pushes the town east. The pick screen wraps to a second row on its
-own.
+the world and pushes the town east. The pick screen wraps to a second row.
 
-> ⚠️ **Careful with the FACES block.** It is generated. If you ever bulk
-> find-and-replace across `index.html`, re-run `make_faces.py` afterwards — a
-> rename I did silently corrupted the `eya` face key and turned her into a
-> cartoon until I regenerated it.
+> ⚠️ **The FACES block is generated.** If you ever bulk find-and-replace across
+> `index.html`, re-run `make_faces.py` afterwards — a rename silently corrupted
+> the `eya` face key once and turned her into a cartoon until it was regenerated.
+
+> ⚠️ **Close `index.html` in VS Code before running the tools.** An open editor
+> tab wrote back a stale buffer once and undid the font embed.
+
+---
 
 ## Debug entry points
 
@@ -93,18 +113,33 @@ Append `=<kid>` to choose who you are: `#house-debs=timmy`, `#dressup=gab`.
 House ids: `eya`, `jeya`, `gab`, `debs`, `boy`. Places: `school`, `church`,
 `snr`, `sm`.
 
-## Where to pick up
+## Verifying a change
 
-1. **Second visual pass.** The map, title, pick screen and dress-up got the new
-   treatment — sky and grass gradients, soft shadows, a lit-window glow on the
-   houses, ground scatter. **The house interiors and the four venues did not.**
-   They are still the original flat fills. That is the biggest remaining gap
-   between this and "modern kids game with great graphics".
-2. **Rig nits.** Gab's cap sits a touch high over the photo face, and the arms
-   read as detached on the `openShirt` top (Timmy). Both are in the character rig
-   near `drawHat` / `drawArms`.
-3. **Ship it.** `soft-kids-game/` is a self-contained static site — drop it on
-   GitHub Pages. The PWA manifest, service worker and icons are already
-   rebranded, and `sw.js` cache is `soft-kids-v1`.
-4. **Not in git yet.** The project has no repo. Worth a `git init` before the
-   next round of changes.
+`scratchpad/shots.mjs` drives the real game in headless Chromium across all 15
+scenes and asserts the semantics (friend houses have no wardrobe, the boy and
+girl racks differ, siblings appear). `depth.mjs` drags a toy behind a person and
+checks it draws behind her. Latest run: **no page errors**.
+
+---
+
+## Deploying
+
+`main` is the source. The site is the `soft-kids-game/` folder published to the
+root of `gh-pages`:
+
+```
+git subtree push --prefix soft-kids-game origin gh-pages
+```
+
+GitHub Pages serves `gh-pages` / root. `sw.js` caches aggressively — bump `CACHE`
+in it when shipping, or returning phones keep the old build.
+
+---
+
+## Known rough edges
+
+- Gab's cap sits slightly high over his photo face, and arms read as detached on
+  the `openShirt` top (Timmy). Both live in the character rig near `drawHat` /
+  `drawArms`.
+- The venue interiors still use emoji for shop goods and the storybook picture.
+  Fine as illustration, but they'd look better hand-drawn.

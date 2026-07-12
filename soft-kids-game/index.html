@@ -1860,7 +1860,7 @@ function houseSVG(h) {
       ${bigLabel(0, 24, h.label, { size: h.label.length > 12 ? 24 : 28, fill: '#6a4a2a', stroke: '#fffaf2' })}
       ${isHome ? `<g transform="translate(96 -74)"><g>
         <circle r="27" fill="#ffce3d" stroke="#fff" stroke-width="5"/>
-        <text y="10" text-anchor="middle" font-size="28">🏠</text>
+        ${icon('home', 0, 0, 28, '#7a5410', 2.4)}
         <animateTransform attributeName="transform" type="translate" values="0 0; 0 -8; 0 0" dur="2s" repeatCount="indefinite"/>
       </g></g>` : ''}
     </g>
