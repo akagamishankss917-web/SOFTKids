@@ -1,0 +1,25 @@
+# Source photographs of real children. These never go to a remote.
+#
+# The game itself needs faces, so make_faces.py crops them to 176x176 and embeds
+# them in soft-kids-game/index.html — that, and only that, is what ships. The
+# full-resolution originals stay on this machine.
+households/
+photos-raw/
+Eya Solo/
+Eya with Mommy Kristine and Daddy Laurence/
+Daddy Laurence/
+Mommy Kristine/
+*.JPG
+*.jpg
+*.jpeg
+*.HEIC
+*.heic
+
+# ...but the game's own generated art must ship
+!soft-kids-game/*.png
+
+# scratch
+.tmp/
+__pycache__/
+*.pyc
+node_modules/
