@@ -4780,10 +4780,12 @@ Scenes.house = {
     const rl = $('#residentLayer');
     const residentPos = {};
     let rHtml = '';
+    // They stand to the right of the bed, not in front of it — a prop you cannot
+    // see is a prop that does not exist.
     h.residents.filter(r => r !== State.hero).forEach((r, i) => {
-      residentPos[r] = { x: 1040 - i * 190, y: 760 };
+      residentPos[r] = { x: 1240 - i * 190, y: 760 };
       rHtml += `<g class="resident" data-key="${r}" data-depth="760" style="cursor:pointer">${
-        buildCharacter(CHARACTERS[r], { x: 1040 - i * 190, y: 760, scale: 0.72, idle: true, facing: -1 })
+        buildCharacter(CHARACTERS[r], { x: 1240 - i * 190, y: 760, scale: 0.72, idle: true, facing: -1 })
       }</g>`;
     });
     rl.innerHTML = rHtml;
@@ -5042,7 +5044,7 @@ Scenes.house = {
             e.stopPropagation();
             if (App.locked) return;
             App.locked = true;
-            hero.walkTo(p.x + 160, 712);
+            hero.walkTo(p.x, 716);          // stand at the bedside
             Audio.sfx('chime');
             const fxB = $('#fxLayer');
             const dim = document.createElementNS(SVGNS, 'g');
