@@ -227,18 +227,26 @@ const Audio = (() => {
     },
   };
 
-  // gentle plucked pentatonic lullaby-ish loop
-  const SCALE = [392, 440, 523, 587, 659, 784];
+  // A composed lullaby, not random plucks: 8 bars of I-vi-IV-V in C, four
+  // beats a bar, with a melody that comes home to rest at the end of the loop.
+  const N = { C4: 262, D4: 294, E4: 330, F4: 349, G4: 392, A4: 440, B4: 494, C5: 523, D5: 587, E5: 659, G5: 784, R: 0 };
+  const TUNE = [
+    { ch: [N.C4, N.E4, N.G4], m: [N.C5, N.E5, N.D5, N.C5] },
+    { ch: [N.A4 / 2, N.C4, N.E4], m: [N.A4, N.C5, N.E5, N.R] },
+    { ch: [N.F4 / 2, N.A4 / 2, N.C4], m: [N.F4, N.A4, N.C5, N.A4] },
+    { ch: [N.G4 / 2, N.B4 / 2, N.D4], m: [N.G4, N.B4, N.D5, N.R] },
+    { ch: [N.C4, N.E4, N.G4], m: [N.E5, N.D5, N.C5, N.G4] },
+    { ch: [N.A4 / 2, N.C4, N.E4], m: [N.A4, N.C5, N.A4, N.E4] },
+    { ch: [N.F4 / 2, N.A4 / 2, N.C4], m: [N.F4, N.G4, N.A4, N.B4] },
+    { ch: [N.G4 / 2, N.B4 / 2, N.D4], m: [N.D5, N.B4, N.G4, N.C5] },
+  ];
+  let barNo = 0;
   function scheduleBar() {
     if (!ctx || State.muted) return;
-    for (let i = 0; i < 4; i++) {
-      if (Math.random() < 0.75) {
-        tone({ freq: pick(SCALE), dur: 0.5, type: 'sine', vol: 0.5, at: i * 0.42, out: musicGain });
-      }
-      if (i === 0 && Math.random() < 0.5) {
-        tone({ freq: pick(SCALE) / 2, dur: 0.9, type: 'triangle', vol: 0.25, at: 0, out: musicGain });
-      }
-    }
+    const bar = TUNE[barNo % TUNE.length];
+    barNo++;
+    bar.ch.forEach((f, i) => tone({ freq: f / 2, dur: 1.5, type: 'sine', vol: i ? 0.10 : 0.16, at: i * 0.02, out: musicGain }));
+    bar.m.forEach((f, i) => f && tone({ freq: f, dur: 0.5, type: 'triangle', vol: 0.42, at: i * 0.42, out: musicGain }));
   }
 
   let voice = null, voiceLoaded = false;
@@ -752,15 +760,17 @@ function buildCharacter(spec, opts = {}) {
   const { x = 0, y = 0, scale = 1, facing = 1, idle = false, cls = '' } = opts;
   const earrings = spec.earrings
     ? `<circle cx="-58" cy="-226" r="5" fill="#f2c94c"/><circle cx="58" cy="-226" r="5" fill="#f2c94c"/>` : '';
-  const bob = idle
-    ? `<animateTransform attributeName="transform" type="translate" values="0 0; 0 -5; 0 0" dur="2.2s" repeatCount="indefinite" additive="sum"/>` : '';
+  const bdur = (2.3 + Math.random() * 1.2).toFixed(2);
+  const sdur = (4.4 + Math.random() * 1.8).toFixed(2);
+  const bob = `<animateTransform attributeName="transform" type="translate" values="0 0; 0 ${idle ? -5 : -3}; 0 0" dur="${bdur}s" repeatCount="indefinite" additive="sum"/>
+      <animateTransform attributeName="transform" type="rotate" values="-1.2 0 -20; 1.2 0 -20; -1.2 0 -20" dur="${sdur}s" repeatCount="indefinite" additive="sum"/>`;
   const face = FACES[spec.face] ? photoFaceLayer(spec) : cartoonFaceLayer(spec);
   const shadow = opts.shadow === false ? ''
     : `<ellipse cx="0" cy="-6" rx="54" ry="15" fill="#2a1a3a" opacity="0.17"/>`;
   return `
   <g class="${cls}" transform="translate(${x} ${y}) scale(${scale * facing} ${scale})">
     ${shadow}
-    <g>${bob}
+    <g class="rig">${bob}
       ${hairBack(spec)}
       <!-- legs: rounded capsules instead of hard-cornered rects -->
       <line x1="-19" y1="-88" x2="-19" y2="-20" stroke="${spec.skin}" stroke-width="24" stroke-linecap="round"/>
@@ -896,6 +906,7 @@ function showPersonActions(personEl, heroEl, px, py, layer) {
         () => el.setAttribute('transform', base));
     });
     floaters(layer, px, py - 200, 'heart');
+    Stickers.award('friend');
   });
   g.querySelector('.hiBtn').addEventListener('pointerdown', e => {
     e.stopPropagation(); clearTimeout(auto); g.remove();
@@ -1143,16 +1154,33 @@ function charDrag(el, opts) {
     const off = { x: grab.x - start.x, y: grab.y - start.y };
     let dragging = false;
     if (el.parentNode) el.parentNode.appendChild(el); // raise to front
+    const rig = el.querySelector('.rig');
+    let tilt = 0, lastX = null;
     const move = ev => {
       const p = toL(toStage(ev.clientX, ev.clientY));
       const tx = p.x + off.x, ty = p.y + off.y;
       if (!dragging && dist(tx, ty, grab.x, grab.y) > 12) { dragging = true; Audio.sfx('pop'); }
-      if (dragging) opts.move(tx, ty);
+      if (dragging) {
+        opts.move(tx, ty);
+        // pendulum: the body swings against the direction of travel
+        if (rig) {
+          const vx = lastX === null ? 0 : tx - lastX;
+          lastX = tx;
+          tilt = clamp(tilt * 0.82 + vx * -0.55, -16, 16);
+          rig.setAttribute('transform', `rotate(${tilt} 0 -200)`);
+        }
+      }
     };
     const up = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', up);
+      if (rig && dragging) {
+        const t0 = tilt;
+        tween(480, t => rig.setAttribute('transform',
+          `rotate(${t0 * (1 - t) * Math.cos(t * Math.PI * 2.5)} 0 -200)`),
+          () => rig.setAttribute('transform', ''));
+      }
       if (!dragging) { if (opts.onTap) opts.onTap(); }
       else { Audio.sfx(opts.dropSfx || 'boing'); if (opts.onDrop) opts.onDrop(opts.getPos()); }
     };
@@ -1296,6 +1324,7 @@ function heroEat(food, hero, camX) {
     }
     Audio.sfx('munch');
     floaters(fx, sx, sy - 30, 'heart');
+    Stickers.award('meal');
     setTimeout(() => Audio.say(pick(YUMS)), 500);
   });
 }
@@ -1369,6 +1398,20 @@ function sunSVG(x, y, r = 62) {
   </g>`;
 }
 
+function birdSVG(delay, dur, path, sc = 1) {
+  return `<g>
+    <animateMotion dur="${dur}s" begin="${delay}s" repeatCount="indefinite" path="${path}" rotate="0"/>
+    <g transform="scale(${sc})">
+      <ellipse cx="0" cy="2" rx="10" ry="6" fill="#5a6a7a"/>
+      <circle cx="10" cy="-2" r="5" fill="#5a6a7a"/>
+      <path d="M 14 -2 l 6 2 -6 2 Z" fill="#f2a13a"/>
+      <g><path d="M -2 0 Q -8 -14 -18 -12 Q -8 -6 -4 2 Z" fill="#48576a">
+        <animateTransform attributeName="transform" type="scale" values="1 1;1 -0.5;1 1" dur="0.5s" repeatCount="indefinite"/>
+      </path></g>
+    </g>
+  </g>`;
+}
+
 function cloudsSVG() {
   return `<g fill="#fff" opacity="0.92">
     <g><ellipse cx="260" cy="112" rx="82" ry="38"/><ellipse cx="330" cy="94" rx="62" ry="31"/><ellipse cx="196" cy="122" rx="50" ry="26"/>
@@ -1377,6 +1420,39 @@ function cloudsSVG() {
       <animateTransform attributeName="transform" type="translate" values="0 0;-120 0;0 0" dur="44s" repeatCount="indefinite"/></g>
     <g><ellipse cx="1180" cy="146" rx="58" ry="26"/><ellipse cx="1232" cy="134" rx="42" ry="21"/>
       <animateTransform attributeName="transform" type="translate" values="0 0;90 0;0 0" dur="52s" repeatCount="indefinite"/></g>
+    <g opacity="0.85"><ellipse cx="540" cy="188" rx="46" ry="20"/><ellipse cx="580" cy="178" rx="32" ry="16"/>
+      <animateTransform attributeName="transform" type="translate" values="0 0;-70 0;0 0" dur="60s" repeatCount="indefinite"/></g>
+  </g>
+  ${birdSVG(0, 34, 'M -60 150 Q 400 100 800 140 Q 1200 180 1700 120', 1.15)}
+  ${birdSVG(-17, 34, 'M -60 210 Q 500 170 900 200 Q 1300 230 1700 180', 0.85)}`;
+}
+
+// A crescent moon for the night sky (fixed r=54 crescent path).
+function moonSVG(x, y) {
+  return `<g transform="translate(${x} ${y})">
+    <circle r="120" fill="url(#sunGlow)" opacity="0.45"/>
+    <path d="M 18 -51 A 54 54 0 1 0 18 51 A 44 44 0 1 1 18 -51 Z" fill="#f5efdc"/>
+    <circle cx="-14" cy="-16" r="7" fill="#ddd4b8"/>
+    <circle cx="-26" cy="14" r="5" fill="#ddd4b8"/>
+    <circle cx="-4" cy="28" r="4" fill="#ddd4b8"/>
+  </g>`;
+}
+
+// Night: a tint over everything, twinkling stars, three drifting fireflies.
+// pointer-events:none so the whole world stays tappable underneath.
+function nightSVG() {
+  return `<g pointer-events="none">
+    <rect width="1600" height="900" fill="#1c2a55" opacity="0.4"/>
+    <g fill="#fff">${Array.from({ length: 26 }, () => {
+      const x = Math.round(Math.random() * 1560 + 20), y = Math.round(Math.random() * 290 + 16);
+      return `<circle cx="${x}" cy="${y}" r="${(Math.random() * 1.7 + 1).toFixed(1)}" opacity="0.9">
+        <animate attributeName="opacity" values="0.9;0.2;0.9" dur="${(Math.random() * 2 + 1.4).toFixed(1)}s" repeatCount="indefinite"/>
+      </circle>`;
+    }).join('')}</g>
+    ${[380, 760, 1180].map((x, i) => `<circle cx="${x}" cy="${640 + i * 40}" r="5" fill="#d8f27a">
+      <animate attributeName="opacity" values="0;1;0" dur="${(2 + i * 0.7).toFixed(1)}s" repeatCount="indefinite"/>
+      <animateTransform attributeName="transform" type="translate" values="0 0; ${24 - i * 16} -34; 0 0" dur="${5 + i}s" repeatCount="indefinite"/>
+    </circle>`).join('')}
   </g>`;
 }
 
@@ -2042,10 +2118,10 @@ function snrSVG(p) {
     <g>
       <rect x="-214" y="-150" width="150" height="110" rx="8" fill="#bfe0f5"/>
       <rect x="-198" y="-134" width="118" height="80" rx="6" fill="#dff1fb"/>
-      <text x="-155" y="-76" text-anchor="middle" font-size="44">🛒</text>
+      <g transform="translate(-155 -94) scale(1.4)"><path d="M -14 -9 h 5 l 4 15 h 16 l 4 -11 h -21" fill="none" stroke="#3a6ab0" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="-2" cy="11" r="3.2" fill="#3a6ab0"/><circle cx="9" cy="11" r="3.2" fill="#3a6ab0"/></g>
       <rect x="64" y="-150" width="150" height="110" rx="8" fill="#bfe0f5"/>
       <rect x="80" y="-134" width="118" height="80" rx="6" fill="#dff1fb"/>
-      <text x="139" y="-78" text-anchor="middle" font-size="40">🥫</text>
+      <g transform="translate(139 -94) scale(1.3)">${packSVG('can', '#f2704a')}</g>
     </g>
     <g class="doorwrap">
       <rect x="-48" y="-120" width="96" height="120" rx="8" fill="#153e82" opacity="0.4"/>
@@ -2187,7 +2263,9 @@ Scenes.map = {
       ${SHARED_DEFS}
       <!-- fixed sky -->
       <rect id="mapGround0" width="1600" height="900" fill="url(#sky)"/>
-      ${sunSVG(1360, 120, 62)}
+      <g id="dayNight" style="cursor:pointer" role="button" aria-label="Day or night" tabindex="0">
+        ${State.night ? moonSVG(1360, 120) : sunSVG(1360, 120, 62)}
+      </g>
       ${cloudsSVG()}
       <!-- distant hills, parallax-free but they give the horizon depth -->
       <g opacity="0.5">
@@ -2216,7 +2294,9 @@ Scenes.map = {
           <g id="heroWalk"></g>
         </g>
       </g>
+      ${State.night ? nightSVG() : ''}
       ${muteButtonSVG()}
+      ${Stickers.buttonSVG()}
       <!-- who am I? tap your own face to play as someone else -->
       <g id="swapBtn" class="clayBtn" style="cursor:pointer" role="button" aria-label="Play as someone else" tabindex="0">
         <g class="clayPress">
@@ -2279,6 +2359,17 @@ Scenes.map = {
     hero.attachGround($('#mapGround'));
     installFoodTray(() => this.hero, () => this.camX);
 
+    // tap the sun and night falls; tap the moon and it's morning
+    $('#dayNight').addEventListener('pointerdown', e => {
+      e.stopPropagation();
+      if (App.locked) return;
+      State.night = !State.night;
+      Audio.sfx('chime');
+      Audio.say(State.night ? 'Gabi na!' : 'Umaga na!');
+      State.mapSpawn = { x: this.hero.pos.x, y: this.hero.pos.y };
+      App.go('map');
+    });
+
     // decorations wiggle (skip playground pieces — they have their own handlers)
     world.querySelectorAll('.deco').forEach(el => {
       el.addEventListener('pointerdown', e => {
@@ -2297,6 +2388,7 @@ Scenes.map = {
     // playground + scattered toys
     this.wirePlayground(world, hero);
     this.wireMapToys(world, hero);
+    this.installQuest(world, home);
 
     // door sequence shared by houses (data-house) and places (data-place):
     // tap the building and the hero knocks + the door swings open, then we go inside
@@ -2455,6 +2547,7 @@ Scenes.map = {
             Audio.sfx('clap');
             confettiBurst(rimX - this.camX, 480);
             Audio.say('Shoot! Ang galing!');
+            Stickers.award('court');
             App.locked = false;
           });
       });
@@ -2469,6 +2562,7 @@ Scenes.map = {
       e.stopPropagation();
       if (App.locked) return;
       Audio.sfx('boing');
+      Stickers.award('football');
       const home = { x: 1720, y: 838 };
       const dx = rand(-360, 360), dy = rand(-40, 30);
       tween(1400, t => {
@@ -2490,6 +2584,7 @@ Scenes.map = {
       e.stopPropagation();
       if (App.locked) return;
       Audio.sfx('pop');
+      Stickers.award('bubbles');
       for (let i = 0; i < 12; i++) {
         setTimeout(() => {
           const b = document.createElementNS(SVGNS, 'g');
@@ -2512,6 +2607,27 @@ Scenes.map = {
         }, i * 130);
       }
     });
+
+    // BUTTERFLY — tap it and it flutters away to a new flower
+    const bfly = world.querySelector('[data-toy="butterfly"]');
+    const bflyArt = world.querySelector('#bflyArt');
+    if (bfly) {
+      let bx = 620, by = 690, flying = false;
+      bfly.addEventListener('pointerdown', e => {
+        e.stopPropagation();
+        if (App.locked || flying) return;
+        flying = true;
+        Audio.sfx('sparkle');
+        const nx = clamp(bx + rand(-700, 700), 300, WORLD_W - 400);
+        const ny = rand(480, 800);
+        const x0 = bx, y0 = by, arcH = rand(120, 260);
+        tween(rand(1400, 2000), t => {
+          const x = x0 + (nx - x0) * easeInOut(t);
+          const y = y0 + (ny - y0) * t - Math.sin(t * Math.PI) * arcH + Math.sin(t * 14) * 12;
+          bflyArt.setAttribute('transform', `translate(${x} ${y})`);
+        }, () => { bx = nx; by = ny; flying = false; });
+      });
+    }
 
     // TRICYCLE — hop on and ride east a short way, then hop off
     const trike = world.querySelector('[data-toy="trike"]');
@@ -2540,7 +2656,96 @@ Scenes.map = {
           if (trikeArt) trikeArt.setAttribute('transform', 'translate(0 0)'); // trike rolls home (off-screen left)
           heroEl.setAttribute('opacity', '1');
           restore(endX + 70, 810);
+          Stickers.award('trike');
           App.locked = false;
+        });
+      });
+    });
+  },
+
+  installQuest(world, home) {
+    const QUESTS = [
+      { line: 'Pumitas ka ng tatlong mangga!', art: `
+        <g transform="rotate(-18)"><ellipse rx="19" ry="25" fill="#ffb830"/><ellipse rx="19" ry="25" fill="url(#wallShade)"/></g>
+        <path d="M 4 -24 q 12 -11 21 -7 q -9 9 -19 11 Z" fill="#6fae4e"/>` },
+      { line: 'Pumitas ka ng tatlong bulaklak!', art: `
+        ${[0, 72, 144, 216, 288].map(a => `<ellipse cx="0" cy="-14" rx="9" ry="15" fill="#ff8fb5" transform="rotate(${a})"/>`).join('')}
+        <circle r="9" fill="#ffd94d"/>` },
+      { line: 'Hanapin mo ang tatlong sisiw!', art: `
+        <ellipse cy="6" rx="18" ry="15" fill="#ffd94d"/><ellipse cy="6" rx="18" ry="15" fill="url(#wallShade)"/>
+        <circle cx="10" cy="-10" r="11" fill="#ffe066"/>
+        <circle cx="13" cy="-12" r="2.5" fill="#241812"/>
+        <path d="M 20 -10 l 8 3 -8 3 Z" fill="#f2a13a"/>
+        <path d="M -6 2 q -8 4 -6 10" fill="none" stroke="#e8b830" stroke-width="3"/>` },
+    ];
+    const q = QUESTS[(State.questIdx || 0) % QUESTS.length];
+
+    const bubble = document.createElementNS(SVGNS, 'g');
+    bubble.setAttribute('style', 'cursor:pointer');
+    bubble.innerHTML = `
+      <g transform="translate(${home.x + 150} ${home.y - 330})">
+        <g>
+          <ellipse rx="52" ry="44" fill="#fff" filter="url(#soft)"/>
+          <path d="M -14 38 L 0 66 L 12 36 Z" fill="#fff"/>
+          <g transform="scale(0.85)">${q.art}</g>
+          <circle cx="38" cy="-30" r="17" fill="#ffce3d" stroke="#fff" stroke-width="4"/>
+          <text x="38" y="-21" text-anchor="middle" font-size="26" font-weight="700" fill="#7a5a10" font-family="'Fredoka',system-ui,sans-serif">!</text>
+          <animateTransform attributeName="transform" type="translate" values="0 0; 0 -14; 0 0" dur="1.6s" repeatCount="indefinite" additive="sum"/>
+        </g>
+      </g>`;
+    world.appendChild(bubble);
+
+    bubble.addEventListener('pointerdown', e => {
+      e.stopPropagation();
+      if (App.locked) return;
+      Audio.sfx('chime');
+      Audio.say(q.line);
+      bubble.remove();
+      State.questIdx = (State.questIdx || 0) + 1;
+
+      // the three collectibles, spread along the barangay so the world gets explored
+      let got = 0;
+      const spots = [0, 1, 2].map(i => ({
+        x: clamp(home.x + (i + 1) * rand(500, 900) * (i % 2 ? 1 : -1) + rand(-200, 200), 320, TOWN_X - 400),
+        y: rand(500, 830),
+      }));
+      const hud = document.createElementNS(SVGNS, 'g');
+      hud.setAttribute('pointer-events', 'none');
+      hud.innerHTML = `
+        <g transform="translate(800 84)">
+          <rect x="-120" y="-46" width="240" height="92" rx="36" fill="#fff" filter="url(#clayDrop)"/>
+          <g transform="translate(-58 0)">${q.art}</g>
+          <text id="questN" x="42" y="16" text-anchor="middle" font-size="44" font-weight="600" fill="#e0567f" font-family="'Fredoka',system-ui,sans-serif">0/3</text>
+        </g>`;
+      stage.appendChild(hud);
+
+      spots.forEach(sp => {
+        const it = document.createElementNS(SVGNS, 'g');
+        it.setAttribute('style', 'cursor:pointer');
+        it.innerHTML = `
+          <g transform="translate(${sp.x} ${sp.y})">
+            <circle r="34" fill="#fff" opacity="0.3">
+              <animate attributeName="r" values="30;40;30" dur="1.4s" repeatCount="indefinite"/>
+            </circle>
+            <g transform="scale(1.25)">${q.art}</g>
+          </g>`;
+        world.appendChild(it);
+        it.addEventListener('pointerdown', ev => {
+          ev.stopPropagation();
+          if (App.locked) return;
+          Audio.sfx('coin');
+          floaters($('#fxLayer'), sp.x - this.camX, sp.y - 60, 'star');
+          it.remove();
+          got++;
+          const n = hud.querySelector('#questN');
+          if (n) n.textContent = got + '/3';
+          if (got === 3) {
+            Audio.sfx('fanfare');
+            confettiBurst(800, 380);
+            setTimeout(() => Audio.say(`Salamat, ${heroLabel()}! Ang galing mo!`), 400);
+            Stickers.award('quest');
+            tween(400, t => hud.setAttribute('opacity', 1 - t), () => hud.remove());
+          }
         });
       });
     });
@@ -2566,6 +2771,7 @@ Scenes.map = {
           if (t > 0.5 && !slide.dataset.said) { slide.dataset.said = '1'; }
         }, () => {
           Audio.sfx('whee'); Audio.say('Wheee!');
+          Stickers.award('slide');
           // slide down chute (quadratic P0->P1->P2)
           const P0 = [2705, 495], P1 = [2770, 760], P2 = [2910, 748];
           tween(800, t => {
@@ -2754,6 +2960,23 @@ function mapToysSVG() {
       </g>
     </g>
 
+    <!-- a butterfly you can chase but never catch -->
+    <g class="toy" data-toy="butterfly" style="cursor:pointer">
+      <g id="bflyArt" transform="translate(620 690)">
+        <g>
+          <g><ellipse cx="-11" cy="-8" rx="13" ry="17" fill="#ffb1d0" stroke="#e0567f" stroke-width="3"/>
+            <circle cx="-12" cy="-12" r="4" fill="#fff" opacity="0.8"/>
+            <animateTransform attributeName="transform" type="scale" values="1 1;0.5 1;1 1" dur="0.55s" repeatCount="indefinite"/></g>
+          <g><ellipse cx="11" cy="-8" rx="13" ry="17" fill="#ffb1d0" stroke="#e0567f" stroke-width="3"/>
+            <circle cx="12" cy="-12" r="4" fill="#fff" opacity="0.8"/>
+            <animateTransform attributeName="transform" type="scale" values="1 1;0.5 1;1 1" dur="0.55s" begin="0.08s" repeatCount="indefinite"/></g>
+          <rect x="-3.5" y="-18" width="7" height="28" rx="3.5" fill="#4a3520"/>
+          <path d="M -2 -18 Q -8 -28 -12 -26 M 2 -18 Q 8 -28 12 -26" fill="none" stroke="#4a3520" stroke-width="2.5" stroke-linecap="round"/>
+          <animateTransform attributeName="transform" type="translate" values="0 0;0 -9;0 0" dur="1.8s" repeatCount="indefinite"/>
+        </g>
+      </g>
+    </g>
+
     <!-- bubble machine outside Jeya's place -->
     <g class="toy" data-toy="bubbleMachine" style="cursor:pointer">
       <g transform="translate(900 800)">
@@ -2922,7 +3145,7 @@ Scenes.place = {
       <!-- alphabet chart -->
       <g transform="translate(1330 250)">
         <rect x="-110" y="-140" width="220" height="270" rx="12" fill="#fffaf2" stroke="#e0c9a8" stroke-width="5"/>
-        ${['🍎', '🐝', '🐱', '🐶'].map((em, i) => `<text x="${-55 + (i % 2) * 110}" y="${-70 + Math.floor(i / 2) * 120}" text-anchor="middle" font-size="64">${em}</text>`).join('')}
+        ${['apple', 'bee', 'cat', 'dog'].map((k, i) => `<g transform="translate(${-55 + (i % 2) * 110} ${-92 + Math.floor(i / 2) * 120}) scale(1.7)">${MINI_ART[k]()}</g>`).join('')}
       </g>
       <!-- windows -->
       <g transform="translate(180 240)">
@@ -2931,6 +3154,23 @@ Scenes.place = {
         <circle cx="46" cy="-40" r="20" fill="#ffe066"/>
         <line x1="0" y1="-84" x2="0" y2="68" stroke="#fffaf2" stroke-width="8"/>
         <line x1="-84" y1="-8" x2="84" y2="-8" stroke="#fffaf2" stroke-width="8"/>
+      </g>
+      <!-- shape sorter: drag each piece into its own hole -->
+      <g transform="translate(1085 250)">
+        <rect x="-112" y="-140" width="224" height="270" rx="12" fill="#fde8c8" stroke="#e0c9a8" stroke-width="5"/>
+        ${bigLabel(0, -104, 'Hugis', { size: 28, fill: '#c98a10', stroke: '#fde8c8' })}
+        <circle cx="0" cy="-48" r="29" fill="#e8d2ac"/>
+        <path d="M 0 -26 L 29 24 L -29 24 Z" fill="#e8d2ac" transform="translate(0 26)"/>
+        <rect x="-26" y="66" width="52" height="52" rx="8" fill="#e8d2ac"/>
+      </g>
+      <g class="shapePiece" data-shape="circle" data-x="985" data-y="430" data-s="1" transform="translate(985 430)" style="cursor:pointer">
+        <circle r="26" fill="#f2704a"/><circle r="26" fill="url(#wallShade)"/>
+      </g>
+      <g class="shapePiece" data-shape="triangle" data-x="1085" data-y="430" data-s="1" transform="translate(1085 430)" style="cursor:pointer">
+        <path d="M 0 -24 L 26 21 L -26 21 Z" fill="#9edb7a"/><path d="M 0 -24 L 26 21 L -26 21 Z" fill="url(#wallShade)"/>
+      </g>
+      <g class="shapePiece" data-shape="square" data-x="1185" data-y="430" data-s="1" transform="translate(1185 430)" style="cursor:pointer">
+        <rect x="-23" y="-23" width="46" height="46" rx="8" fill="#5bb8e8"/><rect x="-23" y="-23" width="46" height="46" rx="8" fill="url(#wallShade)"/>
       </g>
       <!-- reading mat -->
       <ellipse cx="470" cy="835" rx="150" ry="42" fill="#f4a6c0" data-mat="1" style="cursor:pointer"/>
@@ -3006,6 +3246,7 @@ Scenes.place = {
         Audio.sfx('bell');
         stage.querySelectorAll('.person').forEach(pel => waveCharacter(pel));
         setTimeout(() => Audio.say('Recess na!'), 300);
+        Stickers.award('school');
       });
     });
 
@@ -3022,6 +3263,35 @@ Scenes.place = {
       e.stopPropagation();
       hero.approach(1050, 800, 200, () => this.openDrawing());
     });
+
+    // shape sorter: right hole snaps and sparkles, wrong drop flies home
+    const HOLES = { circle: { x: 1085, y: 202 }, triangle: { x: 1085, y: 278 }, square: { x: 1085, y: 342 } };
+    let sorted = 0;
+    stage.querySelectorAll('.shapePiece').forEach(pc => {
+      const kind = pc.dataset.shape;
+      const home2 = { x: +pc.dataset.x, y: +pc.dataset.y };
+      makeDraggable(pc, {
+        dropSfx: 'pop',
+        onDrop: (x, y) => {
+          const back = pc.dataset.done ? HOLES[kind] : home2;
+          if (!pc.dataset.done && dist(x, y, HOLES[kind].x, HOLES[kind].y) < 60) {
+            pc.dataset.done = '1';
+            setXY(pc, HOLES[kind].x, HOLES[kind].y);
+            Audio.sfx('sparkle');
+            floaters($('#uiLayerP'), HOLES[kind].x, HOLES[kind].y - 50, 'star');
+            if (++sorted === 3) {
+              Audio.sfx('fanfare');
+              confettiBurst(1085, 300);
+              setTimeout(() => Audio.say('Ang galing mo!'), 300);
+              Stickers.award('school');
+            }
+          } else {
+            tween(320, t => pc.setAttribute('transform', `translate(${x + (back.x - x) * t} ${y + (back.y - y) * t})`),
+              () => setXY(pc, back.x, back.y));
+          }
+        },
+      });
+    });
   },
 
   storyTime() {
@@ -3035,18 +3305,18 @@ Scenes.place = {
           <rect x="-198" y="-138" width="196" height="276" rx="8" fill="#fffaf2"/>
           <rect x="2" y="-138" width="196" height="276" rx="8" fill="#fffaf2"/>
           <line x1="0" y1="-138" x2="0" y2="138" stroke="#d9c9a8" stroke-width="4"/>
-          <text x="-100" y="-40" text-anchor="middle" font-size="80">🌞</text>
-          <text id="storyPic" x="100" y="-30" text-anchor="middle" font-size="80">🐣</text>
+          <g transform="translate(-100 -60) scale(2)">${MINI_ART.sun()}</g>
+          <g id="storyPic" transform="translate(100 -55) scale(2)">${MINI_ART.chick()}</g>
           ${bigLabel(-100, 90, 'A B C', { size: 40, fill: '#e8709c', stroke: '#fff' })}
         </g>`;
       const book = $('#storyBook');
       tween(300, t => book.setAttribute('opacity', t));
-      const pics = ['🐣', '🌸', '🦋', '⭐'];
+      const pics = ['chick', 'flower', 'butterfly', 'star'];
       let i = 0;
       const flip = () => {
         i++;
         Audio.sfx('pageflip');
-        $('#storyPic').textContent = pics[i % pics.length];
+        $('#storyPic').innerHTML = MINI_ART[pics[i % pics.length]]();
         if (i < 3) setTimeout(flip, 1200);
         else setTimeout(() => {
           tween(300, t => book.setAttribute('opacity', 1 - t), () => { fx.innerHTML = ''; App.locked = false; });
@@ -3066,7 +3336,7 @@ Scenes.place = {
       <rect x="200" y="120" width="1200" height="660" rx="18" fill="#fffaf2" id="drawPaper" style="cursor:crosshair"/>
       <g id="inkLayer" pointer-events="none"></g>
       ${colors.map((c, i) => `<circle class="crayon" data-c="${c}" cx="${260 + i * 90}" cy="820" r="34" fill="${c}" stroke="${c === color ? '#2a2a30' : '#fff'}" stroke-width="5" style="cursor:pointer"/>`).join('')}
-      <g id="eraseBtn" style="cursor:pointer"><circle cx="${260 + 4 * 90}" cy="820" r="34" fill="#fff" stroke="#c9c9d2" stroke-width="5"/><text x="${260 + 4 * 90}" y="834" text-anchor="middle" font-size="34">🧽</text></g>
+      <g id="eraseBtn" style="cursor:pointer"><circle cx="${260 + 4 * 90}" cy="820" r="34" fill="#fff" stroke="#c9c9d2" stroke-width="5"/><g transform="translate(${260 + 4 * 90} 820)"><rect x="-20" y="-13" width="40" height="26" rx="7" fill="#8ecae6"/><rect x="-20" y="-13" width="40" height="13" rx="7" fill="#5bb8e8"/><circle cx="-8" cy="-6" r="2" fill="#bfe8f2"/><circle cx="4" cy="6" r="2" fill="#bfe8f2"/></g></g>
       <g id="drawDone" style="cursor:pointer"><circle cx="1340" cy="820" r="40" fill="#9edb7a" stroke="#fff" stroke-width="6"/><path d="M 1322 820 L 1335 834 L 1360 806" stroke="#fff" stroke-width="9" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g>`;
     stage.appendChild(overlay);
     const paper = $('#drawPaper'), ink = $('#inkLayer');
@@ -3174,12 +3444,24 @@ Scenes.place = {
       <rect id="roomGround" width="1600" height="900" fill="#000" opacity="0"/>
       ${glass(250, ['#8ecae6', '#9edb7a', '#ffd94d', '#ff8fb5', '#c9a0f0'])}
       ${glass(1350, ['#ff8fb5', '#ffd94d', '#9edb7a', '#8ecae6', '#f47a5e'])}
+      <!-- handbells: each rings its own note; ring all four for a cheer -->
+      <g id="bellRow" transform="translate(545 492)">
+        <rect x="-124" y="12" width="248" height="14" rx="7" fill="#a87c4a"/>
+        <rect x="-124" y="12" width="248" height="6" rx="3" fill="#c9a06a"/>
+        ${['#ff8fb5', '#ffd94d', '#9edb7a', '#8ecae6'].map((c, i) => `
+          <g class="hbell" data-n="${i}" style="cursor:pointer" transform="translate(${-90 + i * 60} 0)">
+            <rect x="-4" y="-34" width="8" height="12" rx="3" fill="#8a5f3c"/>
+            <path d="M -20 10 Q -20 -24 0 -24 Q 20 -24 20 10 Z" fill="${c}"/>
+            <path d="M -20 10 Q -20 -24 0 -24 Q 20 -24 20 10 Z" fill="url(#wallShade)"/>
+            <circle cx="0" cy="12" r="5" fill="#8a5f3c"/>
+          </g>`).join('')}
+      </g>
       <!-- choir on a riser -->
       <g id="choir" style="cursor:pointer" data-choir="1">
         <rect x="1120" y="540" width="300" height="30" rx="6" fill="#a87c4a"/>
         ${choirKeys.map((k, i) =>
           `<g class="choirMember">${buildCharacter(CHARACTERS[k], { x: 1180 + i * 90, y: 540, scale: 0.4, idle: true })}</g>`).join('')}
-        ${bigLabel(1450, 430, '🎵', { size: 40, fill: '#fff', stroke: '#8a6a3a' })}
+        <g transform="translate(1450 424) scale(1.05)">${MINI_ART.note()}</g>
       </g>
       <g id="congregation">${congregation}</g>
       ${pew(600, 885)}
@@ -3245,6 +3527,31 @@ Scenes.place = {
       });
     });
 
+    // handbells: C E G C — ring all four and the choir applauds
+    const RUNG = new Set();
+    stage.querySelectorAll('.hbell').forEach(bell => {
+      const n = +bell.dataset.n;
+      const freq = [523, 659, 784, 1047][n];
+      const bx = -90 + n * 60;
+      bell.addEventListener('pointerdown', e => {
+        e.stopPropagation();
+        if (App.locked) return;
+        Audio.note(freq, 0.7);
+        tween(500, t => bell.setAttribute('transform',
+          `translate(${bx} 0) rotate(${Math.sin(t * Math.PI * 4) * 14 * (1 - t)} 0 -30)`),
+          () => bell.setAttribute('transform', `translate(${bx} 0)`));
+        RUNG.add(n);
+        if (RUNG.size === 4) {
+          RUNG.clear();
+          setTimeout(() => {
+            Audio.sfx('clap');
+            floaters($('#uiLayerP'), 545, 420, 'star');
+            stage.querySelectorAll('.choirMember').forEach(m => waveCharacter(m));
+          }, 500);
+        }
+      });
+    });
+
     // offering: drag a coin into the basket
     $('#propLayer').innerHTML = `
       <g class="prop" data-id="coin" data-x="560" data-y="860" data-depth="860" data-s="1" transform="translate(560 860)" style="cursor:pointer">
@@ -3288,7 +3595,7 @@ Scenes.place = {
         <rect x="${-w / 2}" y="-84" width="${w}" height="12" fill="#9fbfe0"/>
         <rect x="${-w / 2}" y="-38" width="${w}" height="12" fill="#9fbfe0"/>
       </g>`;
-    const goods = ['🍎', '🍞', '🥛', '🧃', '🍪', '🍫', '🧀', '🥫', '🍇', '🍊', '🥚', '🍜'];
+
     stage.innerHTML = `
       ${SHARED_DEFS}
       ${venueRoom('#eaf2fb', '#c9d6e6', '#9fbfe0')}
@@ -3298,15 +3605,34 @@ Scenes.place = {
         ${bigLabel(0, 30, 'Grocery &amp; Food', { size: 20, fill: '#dfeaf8', stroke: '#1b4fa0' })}
       </g>
       ${shelf(320, 360)}${shelf(760, 360)}${shelf(1200, 360)}
-      ${goods.map((g, i) => { const x = 190 + i * 108; const y = i % 3 === 0 ? 396 : i % 3 === 1 ? 442 : 488; return `<text x="${Math.min(x, 1410)}" y="${y}" text-anchor="middle" font-size="40">${g}</text>`; }).join('')}
+      ${[320, 760, 1200].map((sx, si) => [388, 434, 480].map((ry, ri) =>
+        Array.from({ length: 5 }, (_, i) => `<g transform="translate(${sx - 124 + i * 62} ${ry - 16})">${
+          packSVG(['can', 'box', 'bottle', 'fruit'][(si + ri + i) % 4],
+                  ['#f2704a', '#5bb8e8', '#9edb7a', '#ffd94d', '#c9a0f0', '#ff8fb5'][(si * 2 + ri + i) % 6])}</g>`).join('')
+      ).join('')).join('')}
       <g transform="translate(1300 800)">
         <rect x="-150" y="-30" width="300" height="90" rx="10" fill="#b98a5a"/>
         <rect x="-150" y="-46" width="300" height="20" rx="6" fill="#d0a878"/>
-        <text x="70" y="22" text-anchor="middle" font-size="46">🧾</text>
-        <text x="-70" y="20" text-anchor="middle" font-size="40">💳</text>
+        <g transform="translate(70 -8)">
+          <rect x="-26" y="-22" width="52" height="30" rx="5" fill="#5a6a7a"/>
+          <rect x="-19" y="-16" width="26" height="14" rx="3" fill="#bfe8f2"/>
+          <rect x="-28" y="8" width="56" height="12" rx="4" fill="#48576a"/>
+          <circle cx="16" cy="-9" r="3" fill="#9edb7a"/>
+        </g>
+        <g transform="translate(-70 -2)">
+          <rect x="-24" y="-16" width="48" height="30" rx="6" fill="#2a52be"/>
+          <rect x="-24" y="-8" width="48" height="9" fill="#1b3a80"/>
+          <rect x="-15" y="6" width="20" height="5" rx="2" fill="#fffaf2"/>
+        </g>
       </g>
       <rect id="roomGround" width="1600" height="900" fill="#000" opacity="0"/>
-      <g id="cart"><text x="520" y="852" text-anchor="middle" font-size="104">🛒</text></g>
+      <g id="cart" transform="translate(520 828)">
+        <ellipse cx="0" cy="46" rx="66" ry="12" fill="#2a4a2a" opacity="0.15"/>
+        <path d="M -62 -50 h 15 l 13 58 h 64 l 15 -44 h -80" fill="none" stroke="#2a52be" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M -28 -22 h 66 M -22 0 h 56 M -18 -36 v 40 M 0 -36 v 44 M 18 -38 v 44" stroke="#5a80d8" stroke-width="4" opacity="0.7"/>
+        <circle cx="-24" cy="24" r="10" fill="#48576a"/><circle cx="-24" cy="24" r="4" fill="#8a96b0"/>
+        <circle cx="26" cy="24" r="10" fill="#48576a"/><circle cx="26" cy="24" r="4" fill="#8a96b0"/>
+      </g>
       <g id="peopleLayer"></g>
       <g id="propLayer"></g>
       <g id="depthLayer"><g id="heroWalkP"></g></g>
@@ -3322,19 +3648,42 @@ Scenes.place = {
     this.wirePerson($('.person[data-key="clerkSnr"]'), 1300, 742, `Welcome to S and R, ${heroLabel()}!`);
 
     const items = [
-      { e: '🍎', x: 700, y: 842 }, { e: '🥛', x: 820, y: 852 }, { e: '🍞', x: 940, y: 842 },
-      { e: '🧃', x: 1060, y: 852 }, { e: '🍌', x: 640, y: 860 }, { e: '🍪', x: 900, y: 864 },
+      { k: 'apple', x: 700, y: 842 }, { k: 'milk', x: 820, y: 852 }, { k: 'bread', x: 940, y: 842 },
+      { k: 'juice', x: 1060, y: 852 }, { k: 'banana', x: 640, y: 860 }, { k: 'cookie', x: 900, y: 864 },
     ];
     $('#propLayer').innerHTML = items.map((it, i) =>
       `<g class="prop" data-id="grocery${i}" data-x="${it.x}" data-y="${it.y}" data-depth="${it.y}" data-s="1" transform="translate(${it.x} ${it.y})" style="cursor:pointer">
         <circle r="40" fill="#fffaf2" stroke="#bfe0f5" stroke-width="5"/>
-        <text x="0" y="16" text-anchor="middle" font-size="46">${it.e}</text>
+        <g transform="scale(1.3)">${MINI_ART[it.k]()}</g>
       </g>`).join('');
+    let scanned = 0;
     $('#propLayer').querySelectorAll('.prop').forEach(el => {
+      const home2 = { x: +el.dataset.x, y: +el.dataset.y };
       makeDraggable(el, {
         dropSfx: 'pop',
         onDrop: (x, y) => {
-          if (dist(x, y, 520, 812) < 160) { Audio.sfx('coin'); floaters($('#uiLayerP'), 520, 700, 'star'); Audio.say(pick(['Sarap niyan!', 'Yehey!', 'Bilhin natin!'])); }
+          if (dist(x, y, 520, 812) < 160) {
+            Audio.sfx('coin'); floaters($('#uiLayerP'), 520, 700, 'star');
+            Audio.say(pick(['Sarap niyan!', 'Yehey!', 'Bilhin natin!']));
+          } else if (dist(x, y, 1300, 790) < 190) {
+            // checkout: beep, the item shrinks onto the counter, then restocks;
+            // every third scan is a full basket — cheer, confetti, sticker
+            Audio.sfx('coin');
+            tween(360, t => el.setAttribute('transform',
+              `translate(${x + (1300 - x) * t} ${y + (786 - y) * t}) scale(${1 - t})`), () => {
+              el.setAttribute('transform', `translate(${home2.x} ${home2.y}) scale(0)`);
+              tween(260, t => el.setAttribute('transform', `translate(${home2.x} ${home2.y}) scale(${t})`),
+                () => setXY(el, home2.x, home2.y));
+              if (++scanned % 3 === 0) {
+                Audio.sfx('fanfare');
+                confettiBurst(1300, 640);
+                const clerk = $('.person[data-key="clerkSnr"]');
+                if (clerk) waveCharacter(clerk.firstElementChild);
+                setTimeout(() => Audio.say(`Salamat sa pagbili, ${heroLabel()}!`), 400);
+                Stickers.award('shop');
+              }
+            });
+          }
         },
       });
     });
@@ -3350,30 +3699,28 @@ Scenes.place = {
       })}
       <g transform="translate(800 108)">
         <rect x="-220" y="-58" width="440" height="100" rx="16" fill="#2a52be"/>
-        ${bigLabel(-42, 8, 'SM', { size: 56, fill: '#fff', stroke: '#2a52be' })}
-        <text x="66" y="6" font-size="46">⭐</text>
+        ${bigLabel(-30, 8, 'SM', { size: 56, fill: '#fff', stroke: '#2a52be' })}
+        <g transform="translate(66 -10) scale(0.75)">${STAR_PATH('#ffd94d')}</g>
         ${bigLabel(0, 32, 'Shopping Mall', { size: 18, fill: '#dfe6fb', stroke: '#2a52be' })}
       </g>
       <g transform="translate(300 460)">
         <rect x="-180" y="-150" width="360" height="190" rx="12" fill="#ffe1ef"/>
         <rect x="-180" y="-150" width="360" height="46" rx="8" fill="#ff8fb5"/>
         ${bigLabel(0, -118, 'Toy Store', { size: 26, fill: '#fff', stroke: '#ff8fb5' })}
-        <text x="-90" y="-24" text-anchor="middle" font-size="60">🧸</text>
-        <text x="0" y="-24" text-anchor="middle" font-size="60">🚂</text>
-        <text x="90" y="-24" text-anchor="middle" font-size="60">🪀</text>
+        ${['teddy', 'train', 'ball'].map((k, i) => `<g transform="translate(${-90 + i * 90} -48) scale(1.7)">${MINI_ART[k]()}</g>`).join('')}
       </g>
       <g transform="translate(1200 460)">
         <rect x="-180" y="-150" width="360" height="190" rx="12" fill="#fff3d6"/>
         <rect x="-180" y="-150" width="360" height="46" rx="8" fill="#ffb347"/>
         ${bigLabel(0, -118, 'Food Court', { size: 26, fill: '#fff', stroke: '#ffb347' })}
-        <text x="-90" y="-24" text-anchor="middle" font-size="56">🍔</text>
-        <text x="0" y="-24" text-anchor="middle" font-size="56">🍟</text>
-        <text x="90" y="-24" text-anchor="middle" font-size="56">🍩</text>
+        ${['burger', 'fries', 'donut'].map((k, i) => `<g transform="translate(${-90 + i * 90} -48) scale(1.7)">${MINI_ART[k]()}</g>`).join('')}
       </g>
       <g transform="translate(800 560)">
         <path d="M -110 40 L 110 -110 L 150 -110 L -70 40 Z" fill="#c8d0e0"/>
         ${Array.from({ length: 6 }, (_, i) => `<line x1="${-90 + i * 34}" y1="${28 - i * 24}" x2="${-58 + i * 34}" y2="${28 - i * 24}" stroke="#8a96b0" stroke-width="5"/>`).join('')}
-        <text x="30" y="-84" text-anchor="middle" font-size="34">⬆️</text>
+        <g transform="translate(30 -92)" stroke="#5a6a7a" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M -11 6 L 0 -6 L 11 6"/><path d="M -11 20 L 0 8 L 11 20"/>
+        </g>
       </g>
       <rect id="roomGround" width="1600" height="900" fill="#000" opacity="0"/>
       <g transform="translate(760 820)">
@@ -3398,13 +3745,13 @@ Scenes.place = {
     this.wirePerson($('.person[data-key="rachel"]'), 470, 806, `Hi ${heroLabel()}! Laro tayo!`);
 
     const toys = [
-      { e: '🧸', x: 640, y: 852 }, { e: '🎈', x: 760, y: 720 }, { e: '🚗', x: 900, y: 860 },
-      { e: '🎀', x: 1020, y: 852 }, { e: '🍦', x: 1120, y: 848 },
+      { k: 'teddy', x: 640, y: 852 }, { k: 'balloon', x: 760, y: 720 }, { k: 'car', x: 900, y: 860 },
+      { k: 'bow', x: 1020, y: 852 }, { k: 'icecream', x: 1120, y: 848 },
     ];
     $('#propLayer').innerHTML = toys.map((it, i) =>
       `<g class="prop" data-id="toy${i}" data-x="${it.x}" data-y="${it.y}" data-depth="${it.y}" data-s="1" transform="translate(${it.x} ${it.y})" style="cursor:pointer">
         <circle r="40" fill="#fffaf2" stroke="#d8c7f0" stroke-width="5"/>
-        <text x="0" y="16" text-anchor="middle" font-size="46">${it.e}</text>
+        <g transform="scale(1.3)">${MINI_ART[it.k]()}</g>
       </g>`).join('');
     $('#propLayer').querySelectorAll('.prop').forEach(el => {
       makeDraggable(el, { dropSfx: 'boing', onDrop: () => Audio.sfx('sparkle') });
@@ -3420,12 +3767,16 @@ Scenes.place = {
         <ellipse cx="0" cy="0" rx="70" ry="56" fill="#fff" opacity="0.97"/>
         <circle cx="-46" cy="40" r="12" fill="#fff" opacity="0.95"/>
         <circle cx="-64" cy="60" r="8" fill="#fff" opacity="0.95"/>
-        <text x="0" y="20" text-anchor="middle" font-size="60">🙏</text>
+        <g stroke="#d9a834" stroke-width="8" stroke-linecap="round">
+          <line x1="0" y1="-36" x2="0" y2="6"/><line x1="-14" y1="-22" x2="14" y2="-22"/>
+        </g>
+        <path d="M 0 38 C -18 26 -14 8 -4 12 Q 0 15 0 19 Q 0 15 4 12 C 14 8 18 26 0 38 Z" fill="#ff8fb5"/>
       </g>`;
     const bubble = $('#prayBubble');
     tween(300, t => bubble.setAttribute('opacity', t), () => {
       Audio.sfx('chime');
       Audio.say('Amen!');
+      Stickers.award('amen');
       setTimeout(() => tween(400, t => bubble.setAttribute('opacity', 1 - t),
         () => { fx.innerHTML = ''; App.locked = false; }), 1400);
     });
@@ -3453,6 +3804,102 @@ function lighten(hex, f) {
   return `rgb(${L(n >> 16 & 255)},${L(n >> 8 & 255)},${L(n & 255)})`;
 }
 
+// ---- small pictograms (each centered on its own origin, radius ~20)
+// The shared kit that replaced the last content emoji: shelf goods, storybook
+// pictures, the alphabet chart, mall displays.
+const MINI_ART = {
+  apple: () => `<circle r="17" fill="#e0455a"/><circle r="17" fill="url(#wallShade)"/>
+    <path d="M 0 -15 q 2 -8 8 -10" stroke="#6a4a2a" stroke-width="3" fill="none"/>
+    <ellipse cx="9" cy="-19" rx="7" ry="4" fill="#6fae4e" transform="rotate(24 9 -19)"/>`,
+  bee: () => `<ellipse cx="-4" cy="-14" rx="9" ry="6" fill="#bfe8f2" opacity="0.85" transform="rotate(-24 -4 -14)"/>
+    <ellipse cx="6" cy="-14" rx="9" ry="6" fill="#bfe8f2" opacity="0.85" transform="rotate(24 6 -14)"/>
+    <ellipse rx="16" ry="12" fill="#ffd94d"/>
+    <path d="M -8 -11 v 22 M 0 -12 v 24 M 8 -11 v 22" stroke="#241812" stroke-width="4"/>
+    <circle cx="14" cy="-4" r="2.5" fill="#241812"/>`,
+  cat: () => `<path d="M -13 -10 l -5 -12 11 5 Z M 13 -10 l 5 -12 -11 5 Z" fill="#e8b88e"/>
+    <circle r="16" fill="#e8b88e"/>
+    <circle cx="-6" cy="-3" r="2.5" fill="#241812"/><circle cx="6" cy="-3" r="2.5" fill="#241812"/>
+    <path d="M -3 5 q 3 3 6 0" stroke="#241812" stroke-width="2" fill="none"/>
+    <path d="M -14 3 h -8 M -14 7 h -7 M 14 3 h 8 M 14 7 h 7" stroke="#241812" stroke-width="1.6"/>`,
+  dog: () => `<ellipse cx="-14" cy="-4" rx="6" ry="11" fill="#a87848"/><ellipse cx="14" cy="-4" rx="6" ry="11" fill="#a87848"/>
+    <circle r="16" fill="#c9975c"/>
+    <circle cx="-6" cy="-3" r="2.5" fill="#241812"/><circle cx="6" cy="-3" r="2.5" fill="#241812"/>
+    <ellipse cy="6" rx="5" ry="4" fill="#241812"/>`,
+  sun: () => `${[0, 45, 90, 135, 180, 225, 270, 315].map(a =>
+      `<line x1="0" y1="-17" x2="0" y2="-23" stroke="#ffd94d" stroke-width="4" stroke-linecap="round" transform="rotate(${a})"/>`).join('')}
+    <circle r="13" fill="#ffe066"/><circle cx="-4" cy="-2" r="1.8" fill="#e8a13a"/><circle cx="4" cy="-2" r="1.8" fill="#e8a13a"/>
+    <path d="M -5 4 q 5 5 10 0" stroke="#e8a13a" stroke-width="2.5" fill="none" stroke-linecap="round"/>`,
+  chick: () => `<ellipse cy="4" rx="15" ry="12" fill="#ffd94d"/><ellipse cy="4" rx="15" ry="12" fill="url(#wallShade)"/>
+    <circle cx="8" cy="-9" r="9" fill="#ffe066"/>
+    <circle cx="11" cy="-11" r="2" fill="#241812"/>
+    <path d="M 16 -9 l 7 2.5 -7 2.5 Z" fill="#f2a13a"/>
+    <path d="M -5 0 q -7 3 -5 8" fill="none" stroke="#e8b830" stroke-width="2.5"/>`,
+  flower: () => `${[0, 72, 144, 216, 288].map(a =>
+      `<ellipse cx="0" cy="-11" rx="7" ry="12" fill="#ff8fb5" transform="rotate(${a})"/>`).join('')}
+    <circle r="7" fill="#ffd94d"/>`,
+  butterfly: () => `<ellipse cx="-9" cy="-5" rx="10" ry="13" fill="#c9a0f0" stroke="#9b6fd0" stroke-width="2"/>
+    <ellipse cx="9" cy="-5" rx="10" ry="13" fill="#c9a0f0" stroke="#9b6fd0" stroke-width="2"/>
+    <rect x="-2.5" y="-13" width="5" height="22" rx="2.5" fill="#4a3520"/>`,
+  star: () => `<g transform="scale(0.62)">${STAR_PATH('#ffd94d')}</g>`,
+  milk: () => `<path d="M -10 -14 l 3 -8 h 14 l 3 8 v 28 h -20 Z" fill="#fbfbfd" stroke="#c9d6e6" stroke-width="2.5"/>
+    <rect x="-10" y="-2" width="20" height="9" fill="#5bb8e8"/>`,
+  bread: () => `<path d="M -18 12 v -12 a 18 13 0 0 1 36 0 v 12 Z" fill="#e0a860"/>
+    <path d="M -9 -7 q 2 -4 6 -4 M 1 -8 q 3 -4 7 -3" stroke="#c98a4a" stroke-width="2.5" fill="none" stroke-linecap="round"/>`,
+  juice: () => `<rect x="-11" y="-13" width="22" height="28" rx="4" fill="#ffb347"/>
+    <rect x="-11" y="-5" width="22" height="9" fill="#fffaf2" opacity="0.85"/>
+    <circle cy="-0.5" r="5" fill="#f2a13a"/>
+    <line x1="7" y1="-13" x2="13" y2="-24" stroke="#e0567f" stroke-width="3" stroke-linecap="round"/>`,
+  banana: () => `<path d="M -15 -9 Q -7 13 16 6 Q 14 12 3 15 Q -15 17 -21 -3 Z" fill="#ffd94d" stroke="#e8b830" stroke-width="2"/>
+    <rect x="-21" y="-9" width="5" height="6" rx="2" fill="#6a4a2a" transform="rotate(-24 -19 -6)"/>`,
+  cookie: () => `<circle r="15" fill="#d99c5f"/><circle r="15" fill="url(#wallShade)"/>
+    <circle cx="-5" cy="-4" r="2.4" fill="#5a3a22"/><circle cx="5" cy="2" r="2.4" fill="#5a3a22"/>
+    <circle cx="-1" cy="8" r="2.4" fill="#5a3a22"/><circle cx="7" cy="-8" r="2.4" fill="#5a3a22"/>`,
+  teddy: () => `<circle cx="-10" cy="-13" r="6" fill="#c9975c"/><circle cx="10" cy="-13" r="6" fill="#c9975c"/>
+    <circle cy="-8" r="11" fill="#d9a86c"/><ellipse cy="9" rx="10" ry="12" fill="#d9a86c"/>
+    <circle cx="-4" cy="-10" r="1.8" fill="#241812"/><circle cx="4" cy="-10" r="1.8" fill="#241812"/>
+    <ellipse cy="-5" rx="4" ry="3" fill="#f0d0a8"/><circle cy="-6.5" r="1.6" fill="#241812"/>`,
+  train: () => `<rect x="-19" y="-9" width="20" height="16" rx="3" fill="#4a90d9"/>
+    <rect x="3" y="-16" width="15" height="23" rx="3" fill="#e0455a"/>
+    <rect x="6" y="-24" width="7" height="9" rx="2" fill="#2c2c38"/>
+    <rect x="-15" y="-5" width="12" height="7" rx="2" fill="#bfe8f2"/>
+    <circle cx="-10" cy="10" r="5" fill="#2c2c38"/><circle cx="10" cy="10" r="5" fill="#2c2c38"/>`,
+  ball: () => `<circle r="15" fill="#fffaf2"/>
+    <path d="M -15 0 A 15 15 0 0 1 15 0 Z" fill="#ff8fb5"/>
+    <path d="M 0 0 L 15 0 A 15 15 0 0 1 4 14 Z" fill="#8ecae6"/>`,
+  burger: () => `<path d="M -16 -3 a 16 11 0 0 1 32 0 Z" fill="#e0a860"/>
+    <circle cx="-6" cy="-8" r="1.4" fill="#fff7df"/><circle cx="3" cy="-10" r="1.4" fill="#fff7df"/>
+    <rect x="-16" y="-3" width="32" height="4" fill="#6fae4e"/>
+    <rect x="-14" y="1" width="28" height="6" rx="2" fill="#8a5230"/>
+    <path d="M -16 7 h 32 v 3 a 6 6 0 0 1 -6 6 h -20 a 6 6 0 0 1 -6 -6 Z" fill="#e8b06a"/>`,
+  fries: () => `${[-9, -3, 3, 9].map(x => `<rect x="${x - 2.5}" y="-17" width="5" height="16" rx="2" fill="#ffd94d"/>`).join('')}
+    <path d="M -14 -3 h 28 l -4 19 h -20 Z" fill="#e0455a"/>
+    <path d="M -8 4 h 16" stroke="#fff" stroke-width="3" opacity="0.6"/>`,
+  donut: () => `<circle r="15" fill="#e8b06a"/><circle r="15" fill="none" stroke="#f0a5c0" stroke-width="7"/>
+    ${[[-8, -6, '#9edb7a'], [6, -9, '#ffd94d'], [9, 5, '#8ecae6'], [-4, 9, '#fff']].map(([x, y, c]) =>
+      `<rect x="${x}" y="${y}" width="5" height="2.4" rx="1.2" fill="${c}" transform="rotate(${(+x * 7) % 60} ${x} ${y})"/>`).join('')}
+    <circle r="5" fill="#fdf3e0"/>`,
+  balloon: () => `<ellipse cy="-8" rx="11" ry="14" fill="#e0455a"/><ellipse cy="-8" rx="11" ry="14" fill="url(#wallShade)"/>
+    <circle cx="-4" cy="-13" r="3" fill="#fff" opacity="0.7"/>
+    <path d="M 0 6 l -3 4 h 6 Z" fill="#c03048"/>
+    <path d="M 0 10 q -4 8 2 16" stroke="#8a8a99" stroke-width="2" fill="none"/>`,
+  car: () => `<path d="M -18 5 q 0 -8 8 -8 l 4 -8 h 12 l 4 8 q 8 0 8 8 v 5 h -36 Z" fill="#4a90d9"/>
+    <rect x="-3" y="-8" width="9" height="6" rx="2" fill="#bfe8f2"/>
+    <circle cx="-9" cy="12" r="5" fill="#2c2c38"/><circle cx="9" cy="12" r="5" fill="#2c2c38"/>`,
+  bow: () => `<path d="M -2 0 L -17 -11 Q -24 0 -17 11 Z M 2 0 L 17 -11 Q 24 0 17 11 Z" fill="#ff5f92"/>
+    <circle r="5.5" fill="#e0456f"/>`,
+  icecream: () => `<path d="M -10 3 L 0 22 L 10 3 Z" fill="#e0a860"/>
+    <path d="M -7 6 h 14 M -4 12 h 8" stroke="#c98a4a" stroke-width="1.6"/>
+    <circle cy="-5" r="10" fill="#f8c8d8"/><circle cx="-5" cy="-12" r="7" fill="#fffaf2"/>`,
+  note: () => `<path d="M -6 22 a 9 9 0 1 1 -0.1 -3 L -6 -22 l 24 -6 l 0 36 a 9 9 0 1 1 -0.1 -3 L 18 -14 l -24 6 Z" fill="#fffaf2" stroke="#8a6a3a" stroke-width="2"/>`,
+};
+
+// Grocery packaging in four shapes; a shelf full of these reads as a store.
+const packSVG = (kind, c) =>
+  kind === 'can' ? `<rect x="-11" y="-15" width="22" height="30" rx="4" fill="${c}"/><ellipse cy="-15" rx="11" ry="4" fill="#d8d8e2"/><rect x="-11" y="-6" width="22" height="11" fill="#fffaf2" opacity="0.9"/>`
+  : kind === 'box' ? `<rect x="-13" y="-16" width="26" height="32" rx="3" fill="${c}"/><rect x="-13" y="-7" width="26" height="11" fill="#fffaf2" opacity="0.85"/>`
+  : kind === 'bottle' ? `<path d="M -7 -19 h 14 v 6 q 6 4 6 11 v 16 h -26 v -16 q 0 -7 6 -11 Z" fill="${c}"/><rect x="-6" y="-24" width="12" height="6" rx="2" fill="#8a8a99"/>`
+  : `<circle r="12" fill="${c}"/><circle r="12" fill="url(#wallShade)"/><ellipse cx="3" cy="-13" rx="5" ry="3" fill="#6fae4e" transform="rotate(24 3 -13)"/>`;
+
 // ---- prop art (each centered on its own origin)
 const PROP_ART = {
   wardrobe: (c = '#e89ab8') => `
@@ -3463,6 +3910,17 @@ const PROP_ART = {
     <rect x="6" y="-276" width="76" height="240" rx="10" fill="url(#wallShade)"/>
     <circle cx="-16" cy="-150" r="9" fill="#fff"/><circle cx="16" cy="-150" r="9" fill="#fff"/>
     <path d="M 0 -238 L 10 -224 A 14 14 0 1 1 -10 -224 Z" fill="${darken(c, 0.3)}" transform="rotate(180 0 -226)"/>`,
+  bed: (c = '#8ecae6') => `
+    <rect x="-108" y="-124" width="16" height="110" rx="6" fill="#8a5f3c"/>
+    <rect x="-108" y="-124" width="6" height="110" rx="3" fill="#a87c4a"/>
+    <rect x="-100" y="-56" width="200" height="34" rx="8" fill="#a87c4a"/>
+    <rect x="-94" y="-22" width="12" height="22" fill="#8a5f3c"/>
+    <rect x="82" y="-22" width="12" height="22" fill="#8a5f3c"/>
+    <rect x="-96" y="-76" width="192" height="26" rx="11" fill="#fffaf2"/>
+    <ellipse cx="-62" cy="-80" rx="26" ry="13" fill="#fff" stroke="#e8ddc8" stroke-width="3"/>
+    <path d="M -28 -78 q -8 22 0 44 h 122 q 6 0 6 -8 v -28 q 0 -8 -6 -8 Z" fill="${c}"/>
+    <path d="M -28 -78 q -8 22 0 44 h 122 q 6 0 6 -8 v -28 q 0 -8 -6 -8 Z" fill="url(#wallShade)"/>
+    <path d="M -28 -78 q -4 11 -2 12 l 122 0 v -4 q 0 -8 -6 -8 Z" fill="#fff" opacity="0.55"/>`,
   unicorn: () => `
     <path d="M -95 60 Q 0 96 95 60" stroke="#c9a06a" stroke-width="12" fill="none" stroke-linecap="round"/>
     <line x1="-60" y1="18" x2="-72" y2="64" stroke="#c9a06a" stroke-width="11"/>
@@ -3813,6 +4271,7 @@ function makeDraggable(el, opts = {}) {
 const HOME_PROPS = [
   { id: 'wardrobe', x: 1430, y: 850, s: 1, kind: 'wardrobe' },
   { id: 'mirror', x: 1330, y: 380, s: 1, kind: 'tap', sfx: 'sparkle', anim: 'sheen' },
+  { id: 'bed', x: 905, y: 648, s: 0.9, kind: 'bed' },
 ];
 
 // Each household's own toys. A friend's house shows only these; the hero's house
@@ -3896,6 +4355,240 @@ const HOUSE_TASKS = {
   boy:  { propId: 'basketball', target: 'titoBoy' },
 };
 const cheerLine = () => `Salamat, ${heroLabel()}! Ang galing!`;
+
+// ============================================================ PHOTO ALBUM
+// The scene, photographed for real: clone the stage SVG, rasterize to a small
+// JPEG (everything in it is data URIs, so the canvas stays clean), keep the
+// last 8 per kid in localStorage.
+function snapshotStage(cb) {
+  try {
+    const clone = stage.cloneNode(true);
+    clone.setAttribute('xmlns', SVGNS);
+    clone.setAttribute('width', 400);
+    clone.setAttribute('height', 225);
+    const xml = new XMLSerializer().serializeToString(clone);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const cv = document.createElement('canvas');
+        cv.width = 400; cv.height = 225;
+        cv.getContext('2d').drawImage(img, 0, 0, 400, 225);
+        cb(cv.toDataURL('image/jpeg', 0.55));
+      } catch (e) { cb(null); }
+    };
+    img.onerror = () => cb(null);
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
+  } catch (e) { cb(null); }
+}
+
+const Album = (() => {
+  const key = () => 'soft-album-' + (State.hero || '');
+  const load = () => { try { return JSON.parse(localStorage.getItem(key())) || []; } catch (e) { return []; } };
+  return {
+    load,
+    add(url) {
+      const a = load();
+      a.unshift(url);
+      while (a.length > 8) a.pop();
+      try { localStorage.setItem(key(), JSON.stringify(a)); } catch (e) {}
+    },
+  };
+})();
+
+// ============================================================ STICKERS
+// Every activity can earn a sticker, once, per kid. The book gives the free
+// play a reason to try everything: an empty dashed slot is a promise, a
+// filled one is a trophy. 16 slots, one per activity, saved per kid.
+const STAR_PATH = c => `<path d="M 0 -30 L 8.3 -8.3 L 30 -8.3 L 11 5.5 L 19 27.4 L 0 13.8 L -19 27.4 L -11 5.5 L -30 -8.3 L -8.3 -8.3 Z" fill="${c}"/>`;
+
+const STICKERS = {
+  meal: { label: 'Kumain', art: () => `
+    <ellipse cy="10" rx="32" ry="14" fill="#fbfbfd" stroke="#c9c9d2" stroke-width="3"/>
+    <ellipse cy="4" rx="18" ry="10" fill="#fffaf2" stroke="#e8ddc8" stroke-width="2"/>
+    <path d="M -8 -8 q 4 -8 0 -16 M 6 -6 q 4 -8 0 -16" stroke="#b9aac6" stroke-width="3" fill="none" stroke-linecap="round"/>` },
+  fashion: { label: 'Bihis', art: () => `
+    <path d="M -12 -26 q 12 8 24 0 l 14 10 -7 11 -7 -4 0 35 -34 0 0 -35 -7 4 -7 -11 Z" fill="#ff8fb5" stroke="#e0567f" stroke-width="3" stroke-linejoin="round"/>` },
+  hoop: { label: 'Shoot!', art: () => `
+    <circle r="26" fill="#e07a3a"/>
+    <path d="M -26 0 h 52 M 0 -26 v 52 M -18 -18 q 18 18 0 36 M 18 -18 q -18 18 0 36" stroke="#7a3a18" stroke-width="3" fill="none"/>` },
+  piano: { label: 'Musika', art: () => `
+    <path d="M -6 22 a 9 9 0 1 1 -0.1 -3 L -6 -22 l 24 -6 l 0 36 a 9 9 0 1 1 -0.1 -3 L 18 -14 l -24 6 Z" fill="#6a4a9c"/>` },
+  bubbles: { label: 'Bula!', art: () => `
+    <circle cx="-10" cy="6" r="18" fill="#bfe8f2" stroke="#8ecae6" stroke-width="3" opacity="0.9"/>
+    <circle cx="16" cy="-10" r="12" fill="#bfe8f2" stroke="#8ecae6" stroke-width="3" opacity="0.9"/>
+    <circle cx="14" cy="16" r="7" fill="#bfe8f2" stroke="#8ecae6" stroke-width="2.5" opacity="0.9"/>
+    <circle cx="-16" cy="0" r="5" fill="#fff" opacity="0.9"/>` },
+  friend: { label: 'Yakap', art: () => `
+    <path d="M 0 22 C -30 0 -24 -26 -8 -18 Q 0 -13 0 -6 Q 0 -13 8 -18 C 24 -26 30 0 0 22 Z" fill="#ff5f92"/>` },
+  slide: { label: 'Padulas', art: () => `
+    <path d="M -26 -20 L -6 -20 L 22 16 L 30 16" fill="none" stroke="#5bb8e8" stroke-width="8" stroke-linecap="round"/>
+    <path d="M -22 24 L -14 -16" stroke="#f2a13a" stroke-width="6" stroke-linecap="round"/>
+    <circle cx="-14" cy="-27" r="7" fill="#f7cfa8"/>` },
+  trike: { label: 'Traysikel', art: () => `
+    <circle cx="-14" cy="14" r="12" fill="none" stroke="#2c2c38" stroke-width="4"/>
+    <circle cx="16" cy="14" r="9" fill="none" stroke="#2c2c38" stroke-width="4"/>
+    <path d="M -14 14 L -4 -10 L 16 -10 M 16 14 L 16 -10 M -10 -10 L 2 -10 M -4 -10 L -14 14" fill="none" stroke="#e0567f" stroke-width="4" stroke-linecap="round"/>` },
+  football: { label: 'Sipa!', art: () => `
+    <circle r="24" fill="#fbfbfd" stroke="#c9c9d2" stroke-width="2"/>
+    <path d="M 0 -11 l 10 7 -4 12 h -12 l -4 -12 Z" fill="#2c2c38"/>
+    <path d="M 0 -24 v 13 M -24 -4 l 10 0 M 24 -4 l -10 0 M -13 20 l 2 -8 M 13 20 l -2 -8" stroke="#2c2c38" stroke-width="2.5"/>` },
+  court: { label: 'Kampeon', art: () => `
+    <path d="M -18 -24 h 36 v 12 a 18 18 0 0 1 -36 0 Z" fill="#ffd94d" stroke="#d9a514" stroke-width="3"/>
+    <path d="M -18 -20 q -14 2 -4 14 M 18 -20 q 14 2 4 14" fill="none" stroke="#d9a514" stroke-width="3.5"/>
+    <rect x="-4" y="4" width="8" height="10" fill="#d9a514"/>
+    <rect x="-13" y="14" width="26" height="8" rx="3" fill="#b8860b"/>` },
+  school: { label: 'Eskwela', art: () => `
+    <g transform="rotate(-45)"><rect x="-7" y="-26" width="14" height="38" rx="3" fill="#ffb347" stroke="#d98c1f" stroke-width="2.5"/>
+    <path d="M -7 12 L 0 26 L 7 12 Z" fill="#f7cfa8" stroke="#d98c1f" stroke-width="2.5" stroke-linejoin="round"/>
+    <rect x="-7" y="-26" width="14" height="8" rx="3" fill="#ff5f92"/></g>` },
+  amen: { label: 'Amen', art: () => `
+    <path d="M -20 22 L -20 0 L 0 -14 L 20 0 L 20 22 Z" fill="#fffaf2" stroke="#c9564a" stroke-width="3.5" stroke-linejoin="round"/>
+    <path d="M 0 -14 L 0 -27 M -6 -22 L 6 -22" stroke="#c9564a" stroke-width="3.5" stroke-linecap="round"/>
+    <rect x="-5" y="8" width="10" height="14" rx="4" fill="#c9564a"/>` },
+  shop: { label: 'Bumili', art: () => `
+    <path d="M -24 -18 h 8 l 6 24 h 26 l 6 -18 h -32" fill="none" stroke="#2a52be" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="-6" cy="16" r="5" fill="#2a52be"/><circle cx="14" cy="16" r="5" fill="#2a52be"/>` },
+  quest: { label: 'Tulong', art: () => STAR_PATH('#ffb100') },
+  bedtime: { label: 'Tulog', art: () => `
+    <path d="M 8 -26 a 26 26 0 1 0 16 40 a 22 22 0 0 1 -16 -40 Z" fill="#ffd94d" stroke="#d9a514" stroke-width="3"/>
+    <circle cx="16" cy="-14" r="3" fill="#d9a514"/>` },
+  photo: { label: 'Litrato', art: () => `
+    <rect x="-26" y="-14" width="52" height="34" rx="8" fill="#5bb8e8" stroke="#2f8fc4" stroke-width="3"/>
+    <path d="M -10 -14 l 4 -8 h 12 l 4 8" fill="#2f8fc4"/>
+    <circle cx="0" cy="3" r="10" fill="#bfe8f2" stroke="#2f8fc4" stroke-width="3"/>
+    <circle cx="18" cy="-6" r="3" fill="#fff"/>` },
+};
+
+const Stickers = (() => {
+  const key = () => 'soft-stickers-' + (State.hero || '');
+  const load = () => { try { return JSON.parse(localStorage.getItem(key())) || {}; } catch (e) { return {}; } };
+  const ids = Object.keys(STICKERS);
+  const count = () => { const o = load(); return ids.filter(id => o[id]).length; };
+
+  function award(id) {
+    if (!STICKERS[id] || !State.hero) return;
+    const o = load();
+    if (o[id]) return;
+    o[id] = 1;
+    try { localStorage.setItem(key(), JSON.stringify(o)); } catch (e) {}
+    toast(id);
+    const badge = $('#stickerCount');
+    if (badge) badge.textContent = count();
+  }
+
+  // A clay card drops in from the top with the new sticker, waits, and leaves.
+  function toast(id) {
+    const st = STICKERS[id];
+    const g = document.createElementNS(SVGNS, 'g');
+    g.setAttribute('pointer-events', 'none');
+    g.innerHTML = `
+      <g class="stkCard" transform="translate(800 -130)">
+        <rect x="-236" y="-64" width="472" height="128" rx="34" fill="#fff" filter="url(#clayDrop)"/>
+        <rect x="-236" y="-64" width="472" height="128" rx="34" fill="url(#clayHi)" opacity="0.5"/>
+        <circle cx="-160" cy="0" r="46" fill="#fff7df" stroke="#ffd94d" stroke-width="5"/>
+        <g transform="translate(-160 0)">${st.art()}</g>
+        <text x="38" y="-10" text-anchor="middle" font-size="34" font-weight="600" fill="#c98a10" font-family="'Fredoka',system-ui,sans-serif">Bagong sticker!</text>
+        <text x="38" y="34" text-anchor="middle" font-size="30" fill="#7a6a86" font-family="'Fredoka',system-ui,sans-serif">${st.label}</text>
+      </g>`;
+    stage.appendChild(g);
+    Audio.sfx('sparkle');
+    setTimeout(() => Audio.sfx('coin'), 180);
+    const card = g.querySelector('.stkCard');
+    tween(420, t => card.setAttribute('transform', `translate(800 ${-130 + 250 * (1 - Math.pow(1 - t, 3))})`), () => {
+      setTimeout(() => tween(300, t2 => {
+        card.setAttribute('transform', `translate(800 ${120 - 260 * t2})`);
+        g.setAttribute('opacity', 1 - t2);
+      }, () => g.remove()), 2100);
+    });
+  }
+
+  // The book: a 4x4 grid over a dimmed scene. Owned stickers are bright; the
+  // rest are dashed slots with a "?" — something still out there to find.
+  function openBook() {
+    if ($('#stickerBook')) return;
+    Audio.sfx('pageflip');
+    const o = load();
+    const g = document.createElementNS(SVGNS, 'g');
+    g.setAttribute('id', 'stickerBook');
+    const slots = ids.map((id, i) => {
+      const x = 420 + (i % 4) * 254, y = 280 + ((i / 4) | 0) * 158;
+      const st = STICKERS[id];
+      return o[id]
+        ? `<g transform="translate(${x} ${y})">
+             <circle r="58" fill="#fff" filter="url(#soft)"/>
+             <circle r="58" fill="none" stroke="#ffd94d" stroke-width="5"/>
+             ${st.art()}
+           </g>`
+        : `<g transform="translate(${x} ${y})">
+             <circle r="58" fill="#f4eef7" stroke="#cfc2da" stroke-width="4" stroke-dasharray="11 11"/>
+             <text y="16" text-anchor="middle" font-size="46" font-weight="600" fill="#b9aac6" font-family="'Fredoka',system-ui,sans-serif">?</text>
+           </g>`;
+    }).join('');
+    g.innerHTML = `
+      <rect id="stkDim" width="1600" height="900" fill="#2a1a3a" opacity="0.45"/>
+      <g style="pointer-events:none">
+        <rect x="240" y="96" width="1120" height="732" rx="46" fill="#fffaf2" filter="url(#clayDrop)"/>
+        <rect x="240" y="96" width="1120" height="732" rx="46" fill="url(#clayHi)" opacity="0.35"/>
+        <text x="780" y="178" text-anchor="middle" font-size="52" font-weight="600" fill="#e0567f" font-family="'Fredoka',system-ui,sans-serif">Mga Sticker ni ${heroLabel()}</text>
+        <text x="780" y="798" text-anchor="middle" font-size="30" fill="#b9aac6" font-family="'Fredoka',system-ui,sans-serif">${count()} / ${ids.length}</text>
+        ${slots}
+      </g>
+      ${clayButton('stkClose', 1310, 160, 46, `<path d="M ${1310 - 15} ${160 - 15} l 30 30 M ${1310 + 15} ${160 - 15} l -30 30" stroke="#7a6a86" stroke-width="7" stroke-linecap="round"/>`, { label: 'Close' })}
+      ${clayButton('stkAlbum', 292, 160, 46, `<g transform="translate(292 160) scale(1.15)">${STICKERS.photo.art()}</g>`, { label: 'Photo album' })}`;
+    stage.appendChild(g);
+    const close = () => { Audio.sfx('pop'); g.remove(); };
+    g.querySelector('#stkDim').addEventListener('pointerdown', e => { e.stopPropagation(); close(); });
+    g.querySelector('#stkClose').addEventListener('pointerdown', e => { e.stopPropagation(); close(); });
+    g.querySelector('#stkAlbum').addEventListener('pointerdown', e => { e.stopPropagation(); g.remove(); openAlbum(); });
+  }
+
+  function openAlbum() {
+    if ($('#photoAlbum')) return;
+    Audio.sfx('pageflip');
+    const shots = Album.load();
+    const g = document.createElementNS(SVGNS, 'g');
+    g.setAttribute('id', 'photoAlbum');
+    const grid = shots.map((u, i) => {
+      const x = 435 + (i % 4) * 246, y = 330 + ((i / 4) | 0) * 240;
+      return `<g transform="translate(${x} ${y}) rotate(${((i % 3) - 1) * 4})">
+        <rect x="-112" y="-76" width="224" height="172" rx="6" fill="#fff" filter="url(#soft)"/>
+        <image href="${u}" x="-100" y="-64" width="200" height="112" preserveAspectRatio="xMidYMid slice"/>
+      </g>`;
+    }).join('');
+    g.innerHTML = `
+      <rect id="albDim" width="1600" height="900" fill="#2a1a3a" opacity="0.45"/>
+      <g style="pointer-events:none">
+        <rect x="240" y="96" width="1120" height="732" rx="46" fill="#fffaf2" filter="url(#clayDrop)"/>
+        <rect x="240" y="96" width="1120" height="732" rx="46" fill="url(#clayHi)" opacity="0.35"/>
+        <text x="800" y="186" text-anchor="middle" font-size="52" font-weight="600" fill="#2f8fc4" font-family="'Fredoka',system-ui,sans-serif">Mga Litrato ni ${heroLabel()}</text>
+        ${grid || `<text x="800" y="480" text-anchor="middle" font-size="34" fill="#b9aac6" font-family="'Fredoka',system-ui,sans-serif">Hanapin mo ang camera sa bahay ni Tito Boy!</text>`}
+      </g>
+      ${clayButton('albClose', 1310, 160, 46, `<path d="M ${1310 - 15} ${160 - 15} l 30 30 M ${1310 + 15} ${160 - 15} l -30 30" stroke="#7a6a86" stroke-width="7" stroke-linecap="round"/>`, { label: 'Close' })}`;
+    stage.appendChild(g);
+    const close = () => { Audio.sfx('pop'); g.remove(); };
+    g.querySelector('#albDim').addEventListener('pointerdown', e => { e.stopPropagation(); close(); });
+    g.querySelector('#albClose').addEventListener('pointerdown', e => { e.stopPropagation(); close(); });
+  }
+
+  // Scenes render this next to the mute button; one delegated listener below
+  // wires every copy, so scenes never need to.
+  function buttonSVG() {
+    return clayButton('stickerBtn', 1520, 196, 52, `
+      <g transform="translate(1520 196) scale(1.35)">${STAR_PATH('#ffb100')}</g>
+      <circle cx="1556" cy="160" r="19" fill="#ff5f92" stroke="#fff" stroke-width="4"/>
+      <text id="stickerCount" x="1556" y="169" text-anchor="middle" font-size="23" font-weight="600" fill="#fff" font-family="'Fredoka',system-ui,sans-serif">${count()}</text>`,
+      { label: 'Sticker book' });
+  }
+
+  document.addEventListener('pointerdown', e => {
+    if (e.target.closest && e.target.closest('#stickerBtn')) {
+      e.stopPropagation();
+      openBook();
+    }
+  }, true);
+
+  return { award, count, openBook, openAlbum, buttonSVG };
+})();
 
 function confettiBurst(x, y) {
   const fx = $('#fxLayer');
@@ -4078,6 +4771,7 @@ Scenes.house = {
       <g id="fxLayer"></g>
       ${clayButton('homeBtn', 92, 806, 58, icon('home', 92, 806, 50, '#7a6a86'), { label: 'Back to the barangay' })}
       ${muteButtonSVG()}
+      ${Stickers.buttonSVG()}
       <g id="uiLayerH"></g>
     `;
 
@@ -4134,6 +4828,7 @@ Scenes.house = {
     if (host) setTimeout(() => waveCharacter(host), 400);
     const outfitNow = JSON.stringify(State.outfit);
     if (State.lastCheeredOutfit && State.lastCheeredOutfit !== outfitNow) {
+      Stickers.award('fashion');
       setTimeout(() => { Audio.say(`${heroGender() === 'boy' ? 'Ang gwapo mo' : 'Ang ganda mo'}, ${heroLabel()}!`); Audio.sfx('sparkle'); }, 900);
     }
     State.lastCheeredOutfit = outfitNow;
@@ -4271,6 +4966,7 @@ Scenes.house = {
                 Audio.sfx('clap');
                 confettiBurst(p.x, p.y - 150);
                 Audio.say('Shoot! Ang galing!');
+                Stickers.award('hoop');
                 App.locked = false;
               });
             });
@@ -4284,6 +4980,7 @@ Scenes.house = {
             const notes = [523, 587, 659, 698, 784, 880, 988];
             const tune = [0, 2, 4, 2, 0, 4, 6, 4];
             tune.forEach((n, i) => setTimeout(() => Audio.note(notes[n]), i * 190));
+            Stickers.award('piano');
             tween(1700, t => {
               const k = 1 + Math.sin(t * Math.PI * 8) * 0.03;
               el.setAttribute('transform', `translate(${p.x} ${p.y}) scale(${p.s * k} ${p.s / k})`);
@@ -4297,6 +4994,7 @@ Scenes.house = {
             if (App.locked) return;
             Audio.sfx('pop');
             wobble(el);
+            Stickers.award('bubbles');
             const fx = $('#fxLayer');
             for (let i = 0; i < 9; i++) {
               const b = document.createElementNS(SVGNS, 'g');
@@ -4338,11 +5036,47 @@ Scenes.house = {
             });
           });
           break;
+        // BED — tuck in: lights dim, Zzz floats up, a lullaby, good night
+        case 'bed':
+          el.addEventListener('pointerdown', e => {
+            e.stopPropagation();
+            if (App.locked) return;
+            App.locked = true;
+            hero.walkTo(p.x + 160, 712);
+            Audio.sfx('chime');
+            const fxB = $('#fxLayer');
+            const dim = document.createElementNS(SVGNS, 'g');
+            dim.setAttribute('pointer-events', 'none');
+            dim.innerHTML = `<rect width="1600" height="900" fill="#1a2a5e" opacity="0"/>`;
+            fxB.appendChild(dim);
+            const dr = dim.querySelector('rect');
+            tween(600, t => dr.setAttribute('opacity', t * 0.5));
+            [0, 1, 2].forEach(i => setTimeout(() => {
+              const z = document.createElementNS(SVGNS, 'g');
+              z.innerHTML = `<text x="${p.x - 50}" y="${p.y - 130}" font-size="${34 + i * 10}" font-weight="600" fill="#bfe8f2" font-family="'Fredoka',system-ui,sans-serif">Z</text>`;
+              fxB.appendChild(z);
+              tween(1600, t => { z.setAttribute('transform', `translate(${t * 44} ${-t * 96})`); z.setAttribute('opacity', 1 - t * 0.7); }, () => z.remove());
+            }, 400 + i * 500));
+            [523, 494, 440, 392].forEach((f, i) => setTimeout(() => Audio.note(f, 0.85), 500 + i * 560));
+            setTimeout(() => Audio.say('Good night!'), 2700);
+            setTimeout(() => {
+              tween(600, t => dr.setAttribute('opacity', 0.5 * (1 - t)), () => dim.remove());
+              Stickers.award('bedtime');
+              App.locked = false;
+            }, 3500);
+          });
+          break;
+        // CAMERA — a real photo: snapshot the scene into the album, then flash
         case 'flash':
           el.addEventListener('pointerdown', e => {
             e.stopPropagation();
             if (App.locked) return;
             hero.approach(p.x, p.y, 210, () => {
+              snapshotStage(url => {
+                if (!url) return;
+                Album.add(url);
+                Stickers.award('photo');
+              });
               Audio.sfx('chime');
               const fx = $('#fxLayer');
               fx.innerHTML = `<rect width="1600" height="900" fill="#fff"/>`;
@@ -4502,11 +5236,7 @@ const App = {
   current: null,
   locked: false,           // guards mid-sequence navigation (door opening)
   _lastGo: 0,
-  go(id) {
-    if (App.locked) return;
-    const now = performance.now();
-    if (App.current && now - App._lastGo < 350) return; // toddler double-tap guard (never blocks the first scene)
-    App._lastGo = now;
+  _switch(id) {
     if (App.current && App.current.exit) App.current.exit();
     const [name, param] = id.split(':');
     App.current = Scenes[name];
@@ -4515,6 +5245,33 @@ const App = {
     // Once built, everything that stands on the floor is collected and y-sorted.
     collectDepthLayer(['.prop', '.resident', '.person']);
     applyMotionPreference();
+  },
+  go(id) {
+    if (App.locked) return;
+    const now = performance.now();
+    if (App.current && now - App._lastGo < 350) return; // toddler double-tap guard (never blocks the first scene)
+    App._lastGo = now;
+    let reduce = false;
+    try { reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+    // First scene and reduced motion cut straight in; everything else gets a
+    // soft iris: a circle closes over the old scene and opens on the new one.
+    if (!App.current || reduce) { App._switch(id); return; }
+    App.locked = true;
+    const cover = document.createElementNS(SVGNS, 'g');
+    cover.setAttribute('pointer-events', 'none');
+    cover.innerHTML = `<circle cx="800" cy="450" r="0" fill="#4a3358"/>`;
+    stage.appendChild(cover);
+    const c1 = cover.querySelector('circle');
+    tween(260, t => c1.setAttribute('r', 1860 * easeInOut(t)), () => {
+      App.locked = false;
+      App._switch(id);
+      const open = document.createElementNS(SVGNS, 'g');
+      open.setAttribute('pointer-events', 'none');
+      open.innerHTML = `<circle cx="800" cy="450" r="1860" fill="#4a3358"/>`;
+      stage.appendChild(open);
+      const c2 = open.querySelector('circle');
+      tween(300, t => c2.setAttribute('r', 1860 * (1 - easeInOut(t))), () => open.remove());
+    });
   }
 };
 
