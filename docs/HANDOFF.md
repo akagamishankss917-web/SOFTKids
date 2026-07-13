@@ -32,11 +32,39 @@ once you pick something. Outfits save per kid.
 
 **Indoors** — a basketball hoop you shoot at (arc, swish, confetti), a piano that
 plays a tune, a bubble jar, a bouncy ball, plus the drums, blocks, dolls, cake,
-cat, robot, guitar, TV, camera, binoculars and watering can from before.
+cat, robot, guitar, TV, binoculars and watering can from before. At **home**
+there is also a bed: tap it and the lights dim, Zzz float up, a lullaby plays,
+and you get tucked in.
 
 **Outdoors** — a barangay basketball court past the mall, a football to boot
 across the field, a bubble machine, the tricycle you can ride, a kite, a dog, a
-jump rope, and the playground (slide, swing, seesaw, sandbox, beach ball).
+jump rope, a butterfly you can chase but never catch, and the playground (slide,
+swing, seesaw, sandbox, beach ball). **Tap the sun** and night falls — stars,
+fireflies, a crescent moon. Tap the moon for morning.
+
+**At the venues** — a shape sorter at school, handbells at church (C-E-G-C; ring
+all four and the choir applauds), and a checkout at S&R where you scan the
+groceries. Tito Boy's **camera takes real photos**: it rasterizes the live scene
+to a JPEG and keeps the last eight in a polaroid album.
+
+## The sticker book
+
+The reward loop. Sixteen slots, one per activity, saved per kid
+(`soft-stickers-<kid>`). An empty slot is a dashed circle with a "?"; earning one
+drops a clay card in from the top. The star button on the map and in the house
+opens the book; a camera chip inside it opens the photo album.
+
+Stickers are awarded from `Stickers.award(id)` calls sprinkled at the moment each
+activity *completes* — never on a tap. The module is self-wiring: it installs one
+delegated capture-phase listener, so a scene only has to render
+`Stickers.buttonSVG()`.
+
+## Quests
+
+A wish bubble bobs over the hero's own house. Tap it and someone at home asks for
+three of something (mangoes, flowers, chicks — the template rotates); the three
+glow somewhere along the barangay, and finding them all earns confetti and the
+Tulong sticker. `Scenes.map.installQuest()`.
 
 ---
 
@@ -74,6 +102,16 @@ Every control is a `clayButton()` that squashes on press (CSS `:active` on
 walls and receding floorboards (`roomDefs()` for houses, `venueRoom()` for the
 four venues). `prefers-reduced-motion` is respected — SMIL is paused by hand in
 `applyMotionPreference()`, since it ignores the CSS media query.
+
+**Nothing stands still.** Every character breathes and sways on its own random
+period (the inner `.rig` group), so a room never moves in lockstep. Pick one up
+and it dangles like a pendulum against the direction you drag, then springs
+upright when you let go. Scenes change through an iris wipe, not a cut.
+
+The last content emoji are gone. `MINI_ART` is a kit of small drawn pictograms
+(shelf goods, storybook pictures, the alphabet chart, mall displays) and
+`packSVG()` generates grocery packaging in four shapes. Emoji rendered
+differently on every phone and could never be recoloured to match the room.
 
 ---
 
@@ -138,5 +176,7 @@ in it when shipping, or returning phones keep the old build.
 
 ## Known rough edges
 
-- The venue interiors still use emoji for shop goods and the storybook picture.
-  Fine as illustration, but they'd look better hand-drawn.
+- Characters glide when they move; there is no walk cycle (no leg swing). Nothing
+  looks broken, but a two-frame swing would sell the motion.
+- The four venues each have one mini-game now. The mall (SM) is still the
+  thinnest — it has things to drag, but nothing to *do*.
