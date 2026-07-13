@@ -249,17 +249,53 @@ const Audio = (() => {
     bar.m.forEach((f, i) => f && tone({ freq: f, dur: 0.5, type: 'triangle', vol: 0.42, at: i * 0.42, out: musicGain }));
   }
 
-  let voice = null, voiceLoaded = false;
+  // A voice per speaker. The system gives us whatever voices the device has, so
+  // sort them into a female and a male bank by name (every platform labels them
+  // differently) and pitch from there: kids high, grown-ups low. Test /female/
+  // BEFORE /male/ — "female" contains "male".
+  const FEMALE = /female|woman|zira|hazel|susan|linda|heather|catherine|samantha|karen|moira|tessa|fiona|victoria|serena|aria|jenny|michelle|eva|nora|rosa|angelo?a|maria/i;
+  const MALE = /\bmale\b|man\b|david|mark|guy|george|james|ryan|thomas|richard|brian|daniel|alex|fred|oliver|william|liam|angelo/i;
+  const VOICE_BANK = { female: null, male: null };
+  let voiceLoaded = false;
+
   function pickVoice() {
     if (voiceLoaded) return;
     try {
       const vs = speechSynthesis.getVoices();
       if (!vs.length) return;
-      voice = vs.find(v => /^(fil|tl)/i.test(v.lang)) || null;
+      // Filipino first if the device has it, then English, then anything.
+      const rank = v => /^(fil|tl)/i.test(v.lang) ? 0 : /^en/i.test(v.lang) ? 1 : 2;
+      const sorted = [...vs].sort((a, b) => rank(a) - rank(b));
+      VOICE_BANK.female = sorted.find(v => FEMALE.test(v.name)) || null;
+      VOICE_BANK.male = sorted.find(v => !FEMALE.test(v.name) && MALE.test(v.name)) || null;
+      // Nothing matched by name: take the first two distinct voices so at least
+      // the grown-ups don't all sound like the same person.
+      if (!VOICE_BANK.female && !VOICE_BANK.male) {
+        VOICE_BANK.female = sorted[0] || null;
+        VOICE_BANK.male = sorted[1] || sorted[0] || null;
+      }
       voiceLoaded = true;
     } catch (e) {}
   }
   try { speechSynthesis.addEventListener('voiceschanged', pickVoice); } catch (e) {}
+
+  // pitch/rate per kind of speaker. A child is not a woman sped up: kids are
+  // pitched well above their adult, and boys sit a little under girls.
+  const SPEAKERS = {
+    girl:  { bank: 'female', pitch: 1.75, rate: 1.02 },
+    boy:   { bank: 'male',   pitch: 1.55, rate: 1.04 },
+    woman: { bank: 'female', pitch: 1.10, rate: 0.94 },
+    man:   { bank: 'male',   pitch: 0.72, rate: 0.88 },
+    narrator: { bank: 'female', pitch: 1.20, rate: 0.90 },
+  };
+
+  // `who` is a character key ('daddyLaurence'), a speaker kind ('girl'), or
+  // nothing — in which case the player is talking, because they usually are.
+  function speakerOf(who) {
+    if (SPEAKERS[who]) return SPEAKERS[who];
+    const c = CHARACTERS[who] || CHARACTERS[State.hero];
+    return SPEAKERS[(c && c.voice) || 'narrator'] || SPEAKERS.narrator;
+  }
 
   return {
     unlock() {
@@ -277,14 +313,16 @@ const Audio = (() => {
       if (State.muted || !ensureCtx()) return;
       try { tone({ freq, dur, type: 'triangle', vol: 0.32 }); } catch (e) {}
     },
-    say(text) {
+    say(text, who) {
       if (State.muted) return;
       try {
         pickVoice();
         speechSynthesis.cancel();
+        const sp = speakerOf(who);
         const u = new SpeechSynthesisUtterance(text);
-        u.rate = 0.9; u.pitch = 1.2; u.volume = 1;
-        if (voice) u.voice = voice;
+        u.rate = sp.rate; u.pitch = sp.pitch; u.volume = 1;
+        const v = VOICE_BANK[sp.bank] || VOICE_BANK.female || VOICE_BANK.male;
+        if (v) u.voice = v;
         speechSynthesis.speak(u);
       } catch (e) {}
     },
@@ -928,19 +966,19 @@ const GAME = { title: 'SOFT Kids Adventure', version: 'v1' };
 const CHARACTERS = {
   // ---- Eya's household
   eya: {
-    label: 'Eya', face: 'eya', gender: 'girl', skin: '#f7cfa8', hairColor: '#241812', hair: 'pigtails',
+    voice: 'girl', label: 'Eya', face: 'eya', gender: 'girl', skin: '#f7cfa8', hairColor: '#241812', hair: 'pigtails',
     hat: 'tiara', smile: 'open', socks: true,
     top: { type: 'dress', color: '#f8bcd2', collar: '#fffaf2' },
     bottom: null, shoes: { type: 'maryjane', color: '#2a2a30' },
   },
   mommyKristine: {
-    label: 'Mommy Kristine', face: 'mommyKristine', skin: '#f2c9a4', hairColor: '#241812', hair: 'longStraight',
+    voice: 'woman', label: 'Mommy Kristine', face: 'mommyKristine', skin: '#f2c9a4', hairColor: '#241812', hair: 'longStraight',
     glasses: 'rect', smile: 'braces',
     top: { type: 'tshirt', color: '#fbfbfd' },
     bottom: { type: 'pants', color: '#2e2e36' }, shoes: { type: 'slipons', color: '#e8e0d8' },
   },
   daddyLaurence: {
-    label: 'Daddy Laurence', face: 'daddyLaurence', skin: '#e2ab7f', hairColor: '#1c1410', hair: 'shortSpiky',
+    voice: 'man', label: 'Daddy Laurence', face: 'daddyLaurence', skin: '#e2ab7f', hairColor: '#1c1410', hair: 'shortSpiky',
     smile: 'grin', watch: 'gold',
     top: { type: 'tshirt', color: '#fbfbfd' },
     bottom: { type: 'shorts', color: '#26262e' }, shoes: { type: 'slipons', color: '#6b4a36' },
@@ -948,19 +986,19 @@ const CHARACTERS = {
 
   // ---- Jeya's household
   jeya: {
-    label: 'Jeya', face: 'jeya', gender: 'boy', skin: '#f0c49a', hairColor: '#1c1410', hair: 'shortNeat',
+    voice: 'boy', label: 'Jeya', face: 'jeya', gender: 'boy', skin: '#f0c49a', hairColor: '#1c1410', hair: 'shortNeat',
     smile: 'open',
     top: { type: 'tshirt', color: '#fbfbfd' },
     bottom: { type: 'pants', color: '#2a2a30' }, shoes: { type: 'sneakers', color: '#4a90d9' },
   },
   nanayJessa: {
-    label: 'Nanay Jessa', face: 'nanayJessa', skin: '#e8b88e', hairColor: '#2a1c14', hair: 'ponytail',
+    voice: 'woman', label: 'Nanay Jessa', face: 'nanayJessa', skin: '#e8b88e', hairColor: '#2a1c14', hair: 'ponytail',
     smile: 'open',
     top: { type: 'tshirt', color: '#5f6b48' },
     bottom: { type: 'pants', color: '#3a3a44' }, shoes: { type: 'sneakers', color: '#fbfbfd' },
   },
   tatayJeff: {
-    label: 'Tatay Jeff', face: 'tatayJeff', skin: '#e2ab7f', hairColor: '#1c1410', hair: 'shortNeat',
+    voice: 'man', label: 'Tatay Jeff', face: 'tatayJeff', skin: '#e2ab7f', hairColor: '#1c1410', hair: 'shortNeat',
     smile: 'grin', watch: 'gold',
     top: { type: 'tshirt', color: '#7a86c4' },
     bottom: { type: 'pants', color: '#2a2a30' }, shoes: { type: 'slipons', color: '#4a4a54' },
@@ -968,13 +1006,13 @@ const CHARACTERS = {
 
   // ---- Gab's household
   gab: {
-    label: 'Gab', face: 'gab', gender: 'boy', skin: '#e0a878', hairColor: '#1c1410', hair: 'shortSpiky',
+    voice: 'boy', label: 'Gab', face: 'gab', gender: 'boy', skin: '#e0a878', hairColor: '#1c1410', hair: 'shortSpiky',
     hat: 'cap', smile: 'soft',
     top: { type: 'tshirt', color: '#fbfbfd' },
     bottom: { type: 'shorts', color: '#3a3a44' }, shoes: { type: 'sneakers', color: '#f2c94c' },
   },
   mommyDanielle: {
-    label: 'Mommy Danielle', face: 'mommyDanielle', skin: '#e8b88e', hairColor: '#141014', hair: 'longStraight',
+    voice: 'woman', label: 'Mommy Danielle', face: 'mommyDanielle', skin: '#e8b88e', hairColor: '#141014', hair: 'longStraight',
     glasses: 'round', smile: 'soft', lips: '#c9707a', earrings: true,
     top: { type: 'cami', color: '#fffaf2' },
     bottom: { type: 'skirt', color: '#3a4a6a' }, shoes: { type: 'sandals', color: '#c9a888' },
@@ -982,19 +1020,19 @@ const CHARACTERS = {
 
   // ---- Mommy Debs' household — two kids, either one can be the hero
   tia: {
-    label: 'Tia', face: 'tia', gender: 'girl', skin: '#e8b88e', hairColor: '#141014', hair: 'shoulderBob',
+    voice: 'girl', label: 'Tia', face: 'tia', gender: 'girl', skin: '#e8b88e', hairColor: '#141014', hair: 'shoulderBob',
     smile: 'soft', socks: true,
     top: { type: 'dress', color: '#f2b33d', collar: null },
     bottom: null, shoes: { type: 'sneakers', color: '#fbfbfd' },
   },
   timmy: {
-    label: 'Timmy', face: 'timmy', gender: 'boy', skin: '#e0a878', hairColor: '#241812', hair: 'shortSpiky',
+    voice: 'boy', label: 'Timmy', face: 'timmy', gender: 'boy', skin: '#e0a878', hairColor: '#241812', hair: 'shortSpiky',
     smile: 'soft', watch: 'dark',
     top: { type: 'openShirt', color: '#c9b08a' },
     bottom: { type: 'shorts', color: '#b8a078' }, shoes: { type: 'sneakers', color: '#fbfbfd' },
   },
   mommyDebs: {
-    label: 'Mommy Debs', face: 'mommyDebs', skin: '#f2c9a4', hairColor: '#141014', hair: 'longStraight',
+    voice: 'woman', label: 'Mommy Debs', face: 'mommyDebs', skin: '#f2c9a4', hairColor: '#141014', hair: 'longStraight',
     smile: 'soft', lips: '#c96a62', earrings: true,
     top: { type: 'blouse', color: '#fffaf2' },
     bottom: { type: 'skirt', color: '#e8e0d0' }, shoes: { type: 'slipons', color: '#c9a888' },
@@ -1002,7 +1040,7 @@ const CHARACTERS = {
 
   // ---- Tito Boy — no kids, just a house to visit
   titoBoy: {
-    label: 'Tito Boy', face: 'titoBoy', skin: '#e2ab7f', hairColor: '#1c1410', hair: 'shortNeat',
+    voice: 'man', label: 'Tito Boy', face: 'titoBoy', skin: '#e2ab7f', hairColor: '#1c1410', hair: 'shortNeat',
     smile: 'braces', watch: 'dark',
     top: { type: 'tshirt', color: '#fbfbfd' },
     bottom: { type: 'shorts', color: '#2a3a5a' }, shoes: { type: 'slipons', color: '#4a4a54' },
@@ -1010,72 +1048,126 @@ const CHARACTERS = {
 
   // ---- Cartoon friends at the town (no photos)
   teacher: {
-    label: 'Teacher Bona', skin: '#f0c49a', hairColor: '#3a281c', hair: 'shoulderBob',
+    voice: 'woman', label: 'Teacher Bona', skin: '#f0c49a', hairColor: '#3a281c', hair: 'shoulderBob',
     glasses: 'rect', smile: 'grin',
     top: { type: 'blouse', color: '#f4886f' },
     bottom: { type: 'skirt', color: '#3c4a6a' }, shoes: { type: 'slipons', color: '#5a4a3c' },
   },
   rachel: {
-    label: 'Rachel', skin: '#f4cba6', hairColor: '#241812', hair: 'shoulderBob',
+    voice: 'girl', label: 'Rachel', skin: '#f4cba6', hairColor: '#241812', hair: 'shoulderBob',
     hat: 'bow', smile: 'open', socks: true,
     top: { type: 'dress', color: '#ffd94d', collar: '#fffaf2' },
     bottom: null, shoes: { type: 'sneakers', color: '#ff8fb5' },
   },
   kidA: {
-    label: 'Miko', skin: '#e0a878', hairColor: '#1c1410', hair: 'shortSpiky',
+    voice: 'boy', label: 'Miko', skin: '#e0a878', hairColor: '#1c1410', hair: 'shortSpiky',
     smile: 'grin',
     top: { type: 'tshirt', color: '#9edb7a' },
     bottom: { type: 'shorts', color: '#5a6a8a' }, shoes: { type: 'sneakers', color: '#4a90d9' },
   },
   kidB: {
-    label: 'Lia', skin: '#f2c9a4', hairColor: '#2a1c14', hair: 'ponytail',
+    voice: 'girl', label: 'Lia', skin: '#f2c9a4', hairColor: '#2a1c14', hair: 'ponytail',
     smile: 'open', socks: true,
     top: { type: 'dress', color: '#8ecae6', collar: '#fffaf2' },
     bottom: null, shoes: { type: 'maryjane', color: '#c94f6a' },
   },
   pastor: {
-    label: 'Pastor', skin: '#e8b88e', hairColor: '#3a3a3a', hair: 'shortNeat',
+    voice: 'man', label: 'Pastor', skin: '#e8b88e', hairColor: '#3a3a3a', hair: 'shortNeat',
     smile: 'soft',
     top: { type: 'polo', color: '#fbfbfd' },
     bottom: { type: 'pants', color: '#3a3a44' }, shoes: { type: 'slipons', color: '#3a3a3a' },
   },
   // ---- Church kids (3 boys, 3 girls; cartoon faces)
   churchBoy1: {
-    label: 'Jun', skin: '#e0a878', hairColor: '#1c1410', hair: 'shortSpiky', smile: 'grin',
+    voice: 'boy', label: 'Jun', skin: '#e0a878', hairColor: '#1c1410', hair: 'shortSpiky', smile: 'grin',
     top: { type: 'polo', color: '#8ecae6' }, bottom: { type: 'pants', color: '#3a4a6a' }, shoes: { type: 'sneakers', color: '#e05a6a' },
   },
   churchBoy2: {
-    label: 'Paolo', skin: '#f0c49a', hairColor: '#241812', hair: 'shortNeat', smile: 'open',
+    voice: 'boy', label: 'Paolo', skin: '#f0c49a', hairColor: '#241812', hair: 'shortNeat', smile: 'open',
     top: { type: 'tshirt', color: '#9edb7a' }, bottom: { type: 'shorts', color: '#5a5a64' }, shoes: { type: 'slipons', color: '#4a4a54' },
   },
   churchBoy3: {
-    label: 'Kevin', skin: '#d99a6a', hairColor: '#1c1410', hair: 'shortSpiky', smile: 'grin',
+    voice: 'boy', label: 'Kevin', skin: '#d99a6a', hairColor: '#1c1410', hair: 'shortSpiky', smile: 'grin',
     top: { type: 'polo', color: '#ffd94d' }, bottom: { type: 'shorts', color: '#c94f5c' }, shoes: { type: 'sneakers', color: '#4a90d9' },
   },
   churchGirl1: {
-    label: 'Sofia', skin: '#f4cba6', hairColor: '#241812', hair: 'longStraight', hat: 'bow', smile: 'open', socks: true,
+    voice: 'girl', label: 'Sofia', skin: '#f4cba6', hairColor: '#241812', hair: 'longStraight', hat: 'bow', smile: 'open', socks: true,
     top: { type: 'dress', color: '#ff8fb5', collar: '#fffaf2' }, bottom: null, shoes: { type: 'maryjane', color: '#fff' },
   },
   churchGirl2: {
-    label: 'Bea', skin: '#e8b88e', hairColor: '#2a1c14', hair: 'ponytail', smile: 'soft', socks: true,
+    voice: 'girl', label: 'Bea', skin: '#e8b88e', hairColor: '#2a1c14', hair: 'ponytail', smile: 'soft', socks: true,
     top: { type: 'dress', color: '#c9a0f0', collar: '#fffaf2' }, bottom: null, shoes: { type: 'maryjane', color: '#7a5aa0' },
   },
   churchGirl3: {
-    label: 'Grace', skin: '#f2c9a4', hairColor: '#3a281c', hair: 'shoulderBob', smile: 'open', socks: true,
+    voice: 'girl', label: 'Grace', skin: '#f2c9a4', hairColor: '#3a281c', hair: 'shoulderBob', smile: 'open', socks: true,
     top: { type: 'dress', color: '#9edb7a', collar: '#fffaf2' }, bottom: null, shoes: { type: 'sneakers', color: '#ff8fb5' },
   },
   // ---- store staff (cartoon)
   clerkSnr: {
-    label: 'Ate Grocer', skin: '#f0c49a', hairColor: '#241812', hair: 'ponytail', smile: 'grin',
+    voice: 'woman', label: 'Ate Grocer', skin: '#f0c49a', hairColor: '#241812', hair: 'ponytail', smile: 'grin',
     top: { type: 'polo', color: '#2a63b8' },
     bottom: { type: 'pants', color: '#26364f' }, shoes: { type: 'slipons', color: '#e8e0d8' },
   },
   clerkSm: {
-    label: 'Kuya Guard', skin: '#e0a878', hairColor: '#1c1410', hair: 'shortNeat', smile: 'soft',
+    voice: 'man', label: 'Kuya Guard', skin: '#e0a878', hairColor: '#1c1410', hair: 'shortNeat', smile: 'soft',
     top: { type: 'polo', color: '#3a63c8' },
     bottom: { type: 'pants', color: '#2a2a34' }, shoes: { type: 'slipons', color: '#3a3a3a' },
   },
 };
+
+// ---- What everyone is CALLED depends on who is playing.
+// Filipino address terms carry age order and family closeness — your own mother
+// is Mommy, someone else's is Tita; an older boy is Kuya, a younger one is just
+// his name. None of that is derivable from the data, so each hero's table is
+// written out in full. Anyone not listed keeps their plain label.
+const NAMES = {
+  eya: {
+    daddyLaurence: 'Daddy Laurence', mommyKristine: 'Mommy Kristine',
+    titoBoy: 'Tito Boy',
+    gab: 'Kuya Gab', mommyDanielle: 'Tita Danielle',
+    jeya: 'Kuya Jeya', nanayJessa: 'Nanay Jessa', tatayJeff: 'Tatay Jeff',
+    tia: 'Ate Tia', timmy: 'Kuya Timmy', mommyDebs: 'Tita Debs',
+    eya: 'Eya',
+  },
+  gab: {
+    daddyLaurence: 'Tito Laurence', mommyKristine: 'Tita Kristine',
+    titoBoy: 'Tito Boy',
+    eya: 'Eya', mommyDanielle: 'Mommy Danielle',
+    jeya: 'Jeya', nanayJessa: 'Tita Jessa', tatayJeff: 'Uncle Jeff',
+    tia: 'Tia', timmy: 'Kuya Timmy', mommyDebs: 'Tita Debs',
+    gab: 'Gab',
+  },
+  tia: {
+    daddyLaurence: 'Tito Laurence', mommyKristine: 'Tita Kristine',
+    titoBoy: 'Tito Boy',
+    eya: 'Eya', mommyDanielle: 'Tita Danielle',
+    jeya: 'Jeya', nanayJessa: 'Tita Jessa', tatayJeff: 'Uncle Jeff',
+    gab: 'Gab', timmy: 'Kuya Timmy', mommyDebs: 'Mommy Debs',
+    tia: 'Tia',
+  },
+  timmy: {
+    daddyLaurence: 'Tito Laurence', mommyKristine: 'Tita Kristine',
+    titoBoy: 'Tito Boy',
+    eya: 'Eya', mommyDanielle: 'Tita Danielle',
+    jeya: 'Jeya', nanayJessa: 'Tita Jessa', tatayJeff: 'Uncle Jeff',
+    gab: 'Gab', tia: 'Tia', mommyDebs: 'Mommy Debs',
+    timmy: 'Timmy',
+  },
+  jeya: {
+    daddyLaurence: 'Tito Laurence', mommyKristine: 'Tita Kristine',
+    titoBoy: 'Tito Boy',
+    eya: 'Eya', mommyDanielle: 'Tita Danielle',
+    gab: 'Gab', nanayJessa: 'Nanay Jessa', tatayJeff: 'Tatay Jeff',
+    tia: 'Tia', timmy: 'Kuya Timmy', mommyDebs: 'Tita Debs',
+    jeya: 'Jeya',
+  },
+};
+
+// What `viewer` calls `key`. Defaults to the player's point of view.
+function nameOf(key, viewer = State.hero) {
+  const t = NAMES[viewer];
+  return (t && t[key]) || (CHARACTERS[key] ? CHARACTERS[key].label : '');
+}
 
 // ============================================================ DRAG MOVEMENT
 // Every character is picked up and dragged. A quick tap (no drag) fires the
@@ -1608,7 +1700,7 @@ Scenes.pick = {
         return `<g>
           <circle cx="${fx}" cy="486" r="54" fill="${t.soft}"/>
           ${buildFace(CHARACTERS[f], { x: fx, y: 486, scale: 0.62 })}
-          ${bigLabel(fx, 556, CHARACTERS[f].label.split(' ')[0], { size: 19, fill: t.deep, stroke: '#fff' })}
+          ${bigLabel(fx, 556, nameOf(f, k).split(' ')[0], { size: 19, fill: t.deep, stroke: '#fff' })}
         </g>`;
       }).join('')}`;
 
@@ -1641,7 +1733,7 @@ Scenes.pick = {
         Audio.unlock();
         this.sel = kid;
         Audio.sfx('pop');
-        Audio.say(CHARACTERS[kid].label);
+        Audio.say(CHARACTERS[kid].label, kid);
         this.renderKid();
         this.renderChips(kids);
         // the new kid hops onto the podium — motion that says "this one now"
@@ -1677,7 +1769,7 @@ Scenes.lineup = {
       ${keys.map((k, i) => {
         const x = 90 + i * 148;
         return buildCharacter(CHARACTERS[k], { x, y: 640, scale: 0.72, idle: true, cls: 'ch-' + k }) +
-          `<text x="${x}" y="${i % 2 ? 756 : 716}" text-anchor="middle" font-size="19" font-family="'Fredoka',system-ui,sans-serif" fill="#3a5a46">${CHARACTERS[k].label}</text>`;
+          `<text x="${x}" y="${i % 2 ? 756 : 716}" text-anchor="middle" font-size="19" font-family="'Fredoka',system-ui,sans-serif" fill="#3a5a46">${nameOf(k)}</text>`;
       }).join('')}
     `;
   },
@@ -2699,7 +2791,7 @@ Scenes.map = {
       e.stopPropagation();
       if (App.locked) return;
       Audio.sfx('chime');
-      Audio.say(q.line);
+      Audio.say(q.line, home.parents[0]);
       bubble.remove();
       State.questIdx = (State.questIdx || 0) + 1;
 
@@ -2742,7 +2834,7 @@ Scenes.map = {
           if (got === 3) {
             Audio.sfx('fanfare');
             confettiBurst(800, 380);
-            setTimeout(() => Audio.say(`Salamat, ${heroLabel()}! Ang galing mo!`), 400);
+            setTimeout(() => Audio.say(`Salamat, ${heroLabel()}! Ang galing mo!`, home.parents[0]), 400);
             Stickers.award('quest');
             tween(400, t => hud.setAttribute('opacity', 1 - t), () => hud.remove());
           }
@@ -3111,7 +3203,7 @@ Scenes.place = {
     const react = () => {
       waveCharacter(el);
       Audio.sfx('chime');
-      Audio.say(line);
+      Audio.say(line, el.dataset.key);
       showPersonActions(el.firstElementChild, $('#heroWalkP').firstElementChild, pos.x, pos.y, $('#uiLayerP'));
     };
     const pos = makeCharMovable(el, { x, y }, { minX: 160, maxX: 1440, minY: 680, maxY: 858 }, {
@@ -3245,7 +3337,7 @@ Scenes.place = {
       hero.approach(470, 730, 170, () => {
         Audio.sfx('bell');
         stage.querySelectorAll('.person').forEach(pel => waveCharacter(pel));
-        setTimeout(() => Audio.say('Recess na!'), 300);
+        setTimeout(() => Audio.say('Recess na!', 'teacher'), 300);
         Stickers.award('school');
       });
     });
@@ -3282,7 +3374,7 @@ Scenes.place = {
             if (++sorted === 3) {
               Audio.sfx('fanfare');
               confettiBurst(1085, 300);
-              setTimeout(() => Audio.say('Ang galing mo!'), 300);
+              setTimeout(() => Audio.say('Ang galing mo!', 'teacher'), 300);
               Stickers.award('school');
             }
           } else {
@@ -3493,7 +3585,7 @@ Scenes.place = {
 
     // family in the pews: walk up, wave + name + hug/high-five
     stage.querySelectorAll('.congFam').forEach(el => {
-      this.wirePerson(el, +el.dataset.x, +el.dataset.y, CHARACTERS[el.dataset.key].label);
+      this.wirePerson(el, +el.dataset.x, +el.dataset.y, nameOf(el.dataset.key));
     });
     // church kids: walk up, wave + happy giggle + name
     stage.querySelectorAll('.congKid').forEach(el => {
@@ -3502,7 +3594,7 @@ Scenes.place = {
         hero.approach(+el.dataset.x, +el.dataset.y, 170, () => {
           waveCharacter(el.firstElementChild);
           Audio.sfx('giggle');
-          Audio.say(CHARACTERS[el.dataset.key].label);
+          Audio.say(nameOf(el.dataset.key), el.dataset.key);
         });
       });
     });
@@ -3566,7 +3658,7 @@ Scenes.place = {
           Audio.sfx('coin');
           tween(500, t => coin.setAttribute('transform', `translate(760 ${858 + t * 20}) scale(${1 - t})`),
             () => {
-              Audio.say(`Salamat, ${heroLabel()}!`);
+              Audio.say(`Salamat, ${heroLabel()}!`, 'pastor');
               setTimeout(() => { setXY(coin, 560, 860); coin.setAttribute('transform', 'translate(560 860)'); }, 2000);
             });
         } else {
@@ -3679,7 +3771,7 @@ Scenes.place = {
                 confettiBurst(1300, 640);
                 const clerk = $('.person[data-key="clerkSnr"]');
                 if (clerk) waveCharacter(clerk.firstElementChild);
-                setTimeout(() => Audio.say(`Salamat sa pagbili, ${heroLabel()}!`), 400);
+                setTimeout(() => Audio.say(`Salamat sa pagbili, ${heroLabel()}!`, 'clerkSnr'), 400);
                 Stickers.award('shop');
               }
             });
@@ -4813,7 +4905,7 @@ Scenes.house = {
       const react = () => {
         waveCharacter(el);
         Audio.sfx('chime');
-        Audio.say(CHARACTERS[el.dataset.key].label);
+        Audio.say(nameOf(el.dataset.key), el.dataset.key);
         showPersonActions(el.firstElementChild, $('#heroWalkH').firstElementChild, pos.x, pos.y, $('#uiLayerH'));
       };
       const pos = makeCharMovable(el, base, RES_BOUNDS, {
@@ -4831,7 +4923,11 @@ Scenes.house = {
     const outfitNow = JSON.stringify(State.outfit);
     if (State.lastCheeredOutfit && State.lastCheeredOutfit !== outfitNow) {
       Stickers.award('fashion');
-      setTimeout(() => { Audio.say(`${heroGender() === 'boy' ? 'Ang gwapo mo' : 'Ang ganda mo'}, ${heroLabel()}!`); Audio.sfx('sparkle'); }, 900);
+      setTimeout(() => {
+        Audio.say(`${heroGender() === 'boy' ? 'Ang gwapo mo' : 'Ang ganda mo'}, ${heroLabel()}!`,
+          host ? host.dataset.key : 'narrator');
+        Audio.sfx('sparkle');
+      }, 900);
     }
     State.lastCheeredOutfit = outfitNow;
 
@@ -5060,7 +5156,7 @@ Scenes.house = {
               tween(1600, t => { z.setAttribute('transform', `translate(${t * 44} ${-t * 96})`); z.setAttribute('opacity', 1 - t * 0.7); }, () => z.remove());
             }, 400 + i * 500));
             [523, 494, 440, 392].forEach((f, i) => setTimeout(() => Audio.note(f, 0.85), 500 + i * 560));
-            setTimeout(() => Audio.say('Good night!'), 2700);
+            setTimeout(() => Audio.say('Good night!', h.parents[0]), 2700);
             setTimeout(() => {
               tween(600, t => dr.setAttribute('opacity', 0.5 * (1 - t)), () => dim.remove());
               Stickers.award('bedtime');
@@ -5132,7 +5228,7 @@ Scenes.house = {
     confettiBurst(ts.tp.x, ts.tp.y - 260);
     const target = stage.querySelector(`.resident[data-key="${ts.target}"]`);
     if (target) { waveCharacter(target); setTimeout(() => waveCharacter(target), 1300); }
-    setTimeout(() => Audio.say(cheerLine()), 500);
+    setTimeout(() => Audio.say(cheerLine(), ts.target), 500);
   },
   exit() {
     if (this.hero) { this.hero.destroy(); this.hero = null; }
