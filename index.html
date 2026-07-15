@@ -3181,6 +3181,7 @@ Scenes.place = {
     else if (id === 'church') this.enterChurch();
     else if (id === 'snr') this.enterSnr();
     else if (id === 'sm') this.enterSm();
+    else if (id === 'sm2') this.enterSm2();
     else App.go('map');
   },
 
@@ -3807,11 +3808,18 @@ Scenes.place = {
         ${bigLabel(0, -118, 'Food Court', { size: 26, fill: '#fff', stroke: '#ffb347' })}
         ${['burger', 'fries', 'donut'].map((k, i) => `<g transform="translate(${-90 + i * 90} -48) scale(1.7)">${MINI_ART[k]()}</g>`).join('')}
       </g>
-      <g transform="translate(800 560)">
+      <!-- escalator to the 2nd floor: tap the steps to ride up -->
+      <g id="smUp" transform="translate(800 560)" style="cursor:pointer">
+        <rect x="-130" y="-150" width="300" height="220" fill="#000" opacity="0"/>
         <path d="M -110 40 L 110 -110 L 150 -110 L -70 40 Z" fill="#c8d0e0"/>
         ${Array.from({ length: 6 }, (_, i) => `<line x1="${-90 + i * 34}" y1="${28 - i * 24}" x2="${-58 + i * 34}" y2="${28 - i * 24}" stroke="#8a96b0" stroke-width="5"/>`).join('')}
         <g transform="translate(30 -92)" stroke="#5a6a7a" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round">
           <path d="M -11 6 L 0 -6 L 11 6"/><path d="M -11 20 L 0 8 L 11 20"/>
+        </g>
+        <g transform="translate(96 -150)">
+          <rect x="-52" y="-30" width="104" height="52" rx="14" fill="#2a52be"/>
+          ${bigLabel(-8, 4, '2F', { size: 28, fill: '#fff', stroke: '#2a52be' })}
+          <path d="M 26 -6 L 34 -16 L 42 -6" stroke="#ffd94d" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
         </g>
       </g>
       <rect id="roomGround" width="1600" height="900" fill="#000" opacity="0"/>
@@ -3847,6 +3855,146 @@ Scenes.place = {
       </g>`).join('');
     $('#propLayer').querySelectorAll('.prop').forEach(el => {
       makeDraggable(el, { dropSfx: 'boing', onDrop: () => Audio.sfx('sparkle') });
+    });
+    // ride the escalator up to the 2nd floor
+    $('#smUp').addEventListener('pointerdown', e => {
+      e.stopPropagation();
+      if (App.locked) return;
+      Audio.sfx('whee');
+      App.go('place:sm2');
+    });
+  },
+
+  // ============ SM — 2nd floor (arcade) ============
+  enterSm2() {
+    stage.innerHTML = `
+      ${SHARED_DEFS}
+      ${venueRoom('#fbeef6', '#efe0ea', '#d8c2ce', {
+        wallArt: `<g opacity="0.5">${Array.from({ length: 8 }, (_, i) =>
+          `<line x1="${i * 220}" y1="0" x2="${i * 220 - 120}" y2="600" stroke="#f6e2ef" stroke-width="40"/>`).join('')}</g>`,
+      })}
+      <g transform="translate(800 108)">
+        <rect x="-250" y="-58" width="500" height="100" rx="16" fill="#8a5fc0"/>
+        ${bigLabel(-46, 8, 'SM', { size: 56, fill: '#fff', stroke: '#8a5fc0' })}
+        <g transform="translate(50 -10) scale(0.75)">${STAR_PATH('#ffd94d')}</g>
+        ${bigLabel(0, 32, '2nd Floor • Arcade', { size: 18, fill: '#f0e6fb', stroke: '#8a5fc0' })}
+      </g>
+      <!-- Cinema storefront (decorative) -->
+      <g transform="translate(1200 460)">
+        <rect x="-180" y="-150" width="360" height="190" rx="12" fill="#dfe6ff"/>
+        <rect x="-180" y="-150" width="360" height="46" rx="8" fill="#5b6ee8"/>
+        ${bigLabel(0, -118, 'Cinema', { size: 26, fill: '#fff', stroke: '#5b6ee8' })}
+        <rect x="-140" y="-86" width="280" height="118" rx="8" fill="#2b2340"/>
+        ${['star', 'balloon', 'donut'].map((k, i) => `<g transform="translate(${-84 + i * 84} -26) scale(1.8)">${MINI_ART[k]()}</g>`).join('')}
+      </g>
+      <!-- Bookstore storefront (decorative) -->
+      <g transform="translate(560 230)">
+        <rect x="-150" y="-70" width="300" height="120" rx="12" fill="#fff0d6"/>
+        <rect x="-150" y="-70" width="300" height="40" rx="8" fill="#e8a13a"/>
+        ${bigLabel(0, -42, 'Bookstore', { size: 22, fill: '#fff', stroke: '#e8a13a' })}
+        ${[0, 1, 2, 3, 4].map(i => `<rect x="${-118 + i * 48}" y="-18" width="36" height="58" rx="4" fill="${['#ff8fb5', '#8ecae6', '#9edb7a', '#ffd94d', '#c9a0f0'][i]}"/>`).join('')}
+      </g>
+      <!-- claw machine: the thing to *do* up here -->
+      <g id="clawMachine" transform="translate(360 500)" style="cursor:pointer">
+        <rect x="-124" y="-244" width="248" height="420" fill="#000" opacity="0"/>
+        <rect x="-110" y="-206" width="220" height="46" rx="12" fill="#c9a0f0"/>
+        ${bigLabel(0, -175, 'ARCADE', { size: 24, fill: '#fff', stroke: '#8a5fc0' })}
+        <rect x="-110" y="-160" width="220" height="336" rx="22" fill="#ff8fb5"/>
+        <rect x="-110" y="-160" width="220" height="336" rx="22" fill="url(#clayHi)" opacity="0.4"/>
+        <rect x="-90" y="-140" width="180" height="214" rx="14" fill="#cdeaf5" opacity="0.85" stroke="#9fd4e6" stroke-width="4"/>
+        <g>${['teddy', 'bow', 'star', 'balloon', 'car'].map((k, i) => `<g transform="translate(${-60 + i * 30} 50) scale(1.05)">${MINI_ART[k]()}</g>`).join('')}</g>
+        <rect x="-90" y="-140" width="180" height="10" rx="5" fill="#8a96b0"/>
+        <g id="clawArm" transform="translate(0 0)">
+          <line x1="0" y1="-140" x2="0" y2="-108" stroke="#6a7686" stroke-width="6"/>
+          <g id="clawGrip" transform="translate(0 -108)">
+            <rect x="-16" y="-8" width="32" height="10" rx="4" fill="#6a7686"/>
+            <path d="M -13 0 q -7 16 -3 26 M 13 0 q 7 16 3 26 M 0 0 v 22" stroke="#5a6a7a" stroke-width="6" fill="none" stroke-linecap="round"/>
+          </g>
+        </g>
+        <rect x="58" y="120" width="48" height="56" rx="8" fill="#ffd94d" opacity="0.55"/>
+        <g id="clawPrize" transform="translate(82 148)" opacity="0"></g>
+      </g>
+      <!-- escalator down to the 1st floor -->
+      <g id="smDown" transform="translate(940 560)" style="cursor:pointer">
+        <rect x="-170" y="-150" width="300" height="220" fill="#000" opacity="0"/>
+        <path d="M -150 -110 L 70 40 L 110 40 L -110 -110 Z" fill="#c8d0e0"/>
+        ${Array.from({ length: 6 }, (_, i) => `<line x1="${58 - i * 34}" y1="${28 - i * 24}" x2="${90 - i * 34}" y2="${28 - i * 24}" stroke="#8a96b0" stroke-width="5"/>`).join('')}
+        <g transform="translate(-30 -92)" stroke="#5a6a7a" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M -11 -6 L 0 6 L 11 -6"/><path d="M -11 -20 L 0 -8 L 11 -20"/>
+        </g>
+        <g transform="translate(-96 -150)">
+          <rect x="-52" y="-30" width="104" height="52" rx="14" fill="#2a52be"/>
+          ${bigLabel(-8, 4, '1F', { size: 28, fill: '#fff', stroke: '#2a52be' })}
+          <path d="M 26 -16 L 34 -6 L 42 -16" stroke="#ffd94d" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        </g>
+      </g>
+      <rect id="roomGround" width="1600" height="900" fill="#000" opacity="0"/>
+      <g transform="translate(760 830)">
+        <ellipse cx="0" cy="20" rx="210" ry="52" fill="#f2d5e6"/>
+        ${['#ff8fb5', '#ffd94d', '#9edb7a', '#8ecae6', '#c9a0f0', '#f47a5e'].map((c, i) => `<circle cx="${-150 + i * 60}" cy="${10 + (i % 2 ? 14 : -4)}" r="24" fill="${c}"/>`).join('')}
+      </g>
+      <g id="peopleLayer"></g>
+      <g id="propLayer"></g>
+      <g id="depthLayer"><g id="heroWalkP"></g></g>
+      <g id="fxLayer"></g>
+      ${clayButton('homeBtn', 92, 806, 58, icon('home', 92, 806, 50, '#7a6a86'), { label: 'Back to the barangay' })}
+      ${muteButtonSVG()}
+      <g id="uiLayerP"></g>
+    `;
+    $('#peopleLayer').innerHTML =
+      `<g class="person" data-key="rachel" style="cursor:pointer">${
+        buildCharacter(CHARACTERS.rachel, { x: 1180, y: 806, scale: 0.55, idle: true, facing: -1 })}</g>`;
+    this.finishRoom(760, 844);
+    this.wirePerson($('.person[data-key="rachel"]'), 1180, 806, `Ang saya sa taas, ${heroLabel()}! Subukan mo ang claw machine!`);
+
+    const toys = [
+      { k: 'donut', x: 640, y: 852 }, { k: 'balloon', x: 780, y: 720 }, { k: 'note', x: 900, y: 860 },
+      { k: 'cookie', x: 1020, y: 852 }, { k: 'juice', x: 1120, y: 848 },
+    ];
+    $('#propLayer').innerHTML = toys.map((it, i) =>
+      `<g class="prop" data-id="toy${i}" data-x="${it.x}" data-y="${it.y}" data-depth="${it.y}" data-s="1" transform="translate(${it.x} ${it.y})" style="cursor:pointer">
+        <circle r="40" fill="#fffaf2" stroke="#d8c7f0" stroke-width="5"/>
+        <g transform="scale(1.3)">${MINI_ART[it.k]()}</g>
+      </g>`).join('');
+    $('#propLayer').querySelectorAll('.prop').forEach(el => {
+      makeDraggable(el, { dropSfx: 'boing', onDrop: () => Audio.sfx('sparkle') });
+    });
+
+    // escalator back down to the 1st floor
+    $('#smDown').addEventListener('pointerdown', e => {
+      e.stopPropagation();
+      if (App.locked) return;
+      Audio.sfx('whee');
+      App.go('place:sm');
+    });
+
+    // claw machine: tap to drop the claw, grab a prize, and win it
+    const prizes = ['teddy', 'bow', 'star', 'balloon', 'car'];
+    $('#clawMachine').addEventListener('pointerdown', e => {
+      e.stopPropagation();
+      if (App.locked) return;
+      App.locked = true;
+      const arm = $('#clawArm'), grip = $('#clawGrip'), prize = $('#clawPrize');
+      const won = pick(prizes);
+      Audio.sfx('boing');
+      tween(600, t => arm.setAttribute('transform', `translate(0 ${190 * easeInOut(t)})`), () => {
+        Audio.sfx('pop');
+        grip.setAttribute('transform', 'translate(0 -108) scale(0.72 1)');
+        setTimeout(() => {
+          tween(600, t => arm.setAttribute('transform', `translate(0 ${190 * (1 - easeInOut(t))})`), () => {
+            grip.setAttribute('transform', 'translate(0 -108)');
+            prize.innerHTML = `<g transform="scale(1.5)">${MINI_ART[won]()}</g>`;
+            tween(280, t => prize.setAttribute('opacity', t));
+            Audio.sfx('fanfare');
+            confettiBurst(442, 648);
+            setTimeout(() => Audio.say(`Panalo, ${heroLabel()}!`, 'rachel'), 300);
+            setTimeout(() => {
+              tween(320, t => prize.setAttribute('opacity', 1 - t), () => { prize.innerHTML = ''; });
+              App.locked = false;
+            }, 1600);
+          });
+        }, 240);
+      });
     });
   },
 
