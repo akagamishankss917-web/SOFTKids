@@ -44,8 +44,11 @@ fireflies, a crescent moon. Tap the moon for morning.
 
 **At the venues** — a shape sorter at school, handbells at church (C-E-G-C; ring
 all four and the choir applauds), and a checkout at S&R where you scan the
-groceries. Tito Boy's **camera takes real photos**: it rasterizes the live scene
-to a JPEG and keeps the last eight in a polaroid album.
+groceries. **SM has two floors:** tap the escalator (the "2F" sign) to ride up
+to the arcade, where a claw machine drops its claw, grabs a plushie and rains
+confetti; the "1F" escalator rides back down. Tito Boy's **camera takes real
+photos**: it rasterizes the live scene to a JPEG and keeps the last eight in a
+polaroid album.
 
 ## The sticker book
 
@@ -149,7 +152,7 @@ the world and pushes the town east. The pick screen wraps to a second row.
 `#pick`, `#lineup`, `#map`, `#house-<id>`, `#place-<id>`, `#dressup`.
 Append `=<kid>` to choose who you are: `#house-debs=timmy`, `#dressup=gab`.
 House ids: `eya`, `jeya`, `gab`, `debs`, `boy`. Places: `school`, `church`,
-`snr`, `sm`.
+`snr`, `sm`, `sm2` (the SM 2nd floor / arcade).
 
 ## Verifying a change
 
@@ -178,5 +181,9 @@ in it when shipping, or returning phones keep the old build.
 
 - Characters glide when they move; there is no walk cycle (no leg swing). Nothing
   looks broken, but a two-frame swing would sell the motion.
-- The four venues each have one mini-game now. The mall (SM) is still the
-  thinnest — it has things to drag, but nothing to *do*.
+- Characters glide when they move on the SM 2nd floor too — the walk-cycle gap
+  applies everywhere.
+- The SM arcade's claw machine always "wins" (it's for toddlers) and awards no
+  sticker — the 16-slot book is full, so a 17th would overflow its fixed 4×4
+  panel. If the book is ever re-laid-out to hold more, the arcade is the natural
+  place to hang a new one.

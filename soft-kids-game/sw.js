@@ -1,5 +1,5 @@
 // Cache-first service worker: after the first visit, the game launches fully offline.
-const CACHE = 'soft-kids-v7';
+const CACHE = 'soft-kids-v8';
 const ASSETS = [
   '.',
   'index.html',
